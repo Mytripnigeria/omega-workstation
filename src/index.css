@@ -2,95 +2,95 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 260 30% 6%;
+    --foreground: 0 0% 98%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card: 260 25% 10%;
+    --card-foreground: 0 0% 98%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover: 260 25% 10%;
+    --popover-foreground: 0 0% 98%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 320 80% 55%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 260 20% 18%;
+    --secondary-foreground: 0 0% 98%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 260 15% 20%;
+    --muted-foreground: 260 10% 60%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 320 70% 50%;
+    --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --border: 260 20% 18%;
+    --input: 260 20% 15%;
+    --ring: 320 80% 55%;
 
-    --radius: 0.5rem;
+    --radius: 0.75rem;
 
-    --sidebar-background: 0 0% 98%;
+    /* Category pastel colors */
+    --category-mint: 165 60% 85%;
+    --category-lavender: 270 60% 88%;
+    --category-pink: 340 70% 88%;
+    --category-peach: 25 80% 88%;
+    --category-sky: 200 70% 88%;
+    --category-sage: 140 40% 85%;
+    --category-cream: 45 60% 90%;
+    --category-coral: 10 80% 85%;
 
-    --sidebar-foreground: 240 5.3% 26.1%;
+    /* Status colors */
+    --status-success: 145 65% 42%;
+    --status-warning: 38 92% 50%;
+    --status-info: 200 80% 55%;
+    --status-process: 320 70% 50%;
 
-    --sidebar-primary: 240 5.9% 10%;
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(320, 80%, 55%) 0%, hsl(280, 70%, 45%) 100%);
+    --gradient-card: linear-gradient(180deg, hsl(260, 25%, 12%) 0%, hsl(260, 25%, 8%) 100%);
+    --gradient-glow: radial-gradient(ellipse at top, hsl(320, 80%, 25%, 0.3) 0%, transparent 60%);
 
-    --sidebar-primary-foreground: 0 0% 98%;
+    /* Shadows */
+    --shadow-card: 0 4px 24px -4px hsl(260, 50%, 5%, 0.5);
+    --shadow-glow: 0 0 40px -10px hsl(320, 80%, 55%, 0.4);
 
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-background: 260 25% 8%;
+    --sidebar-foreground: 0 0% 98%;
+    --sidebar-primary: 320 80% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 260 20% 15%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 260 20% 18%;
+    --sidebar-ring: 320 80% 55%;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --background: 260 30% 6%;
+    --foreground: 0 0% 98%;
+    --card: 260 25% 10%;
+    --card-foreground: 0 0% 98%;
+    --popover: 260 25% 10%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 320 80% 55%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 260 20% 18%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 260 15% 20%;
+    --muted-foreground: 260 10% 60%;
+    --accent: 320 70% 50%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 260 20% 18%;
+    --input: 260 20% 15%;
+    --ring: 320 80% 55%;
   }
 }
 
@@ -100,6 +100,78 @@ All colors MUST be HSL.
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', sans-serif;
   }
+}
+
+@layer components {
+  .card-gradient {
+    background: var(--gradient-card);
+  }
+
+  .glow-effect {
+    box-shadow: var(--shadow-glow);
+  }
+
+  .category-tile {
+    @apply rounded-xl p-4 flex flex-col items-center justify-center gap-2 cursor-pointer transition-all duration-200;
+    @apply hover:scale-105 hover:shadow-lg active:scale-95;
+  }
+
+  .pin-button {
+    @apply w-16 h-16 sm:w-20 sm:h-20 rounded-2xl text-2xl font-semibold;
+    @apply flex items-center justify-center transition-all duration-150;
+    @apply hover:scale-105 active:scale-95;
+  }
+
+  .workstation-card {
+    @apply relative overflow-hidden rounded-2xl p-6 cursor-pointer transition-all duration-300;
+    @apply hover:scale-[1.02] hover:-translate-y-1 active:scale-[0.98];
+    box-shadow: var(--shadow-card);
+  }
+
+  .workstation-card::before {
+    content: '';
+    @apply absolute inset-0 opacity-0 transition-opacity duration-300;
+    background: var(--gradient-glow);
+  }
+
+  .workstation-card:hover::before {
+    @apply opacity-100;
+  }
+
+  .status-badge {
+    @apply px-3 py-1 rounded-full text-xs font-medium;
+  }
+
+  .input-pin {
+    @apply w-12 h-14 sm:w-14 sm:h-16 text-2xl font-bold text-center rounded-xl;
+    @apply bg-secondary border-2 border-border focus:border-primary focus:ring-0;
+    @apply transition-all duration-200;
+  }
+}
+
+@layer utilities {
+  .bg-category-mint { background-color: hsl(var(--category-mint)); }
+  .bg-category-lavender { background-color: hsl(var(--category-lavender)); }
+  .bg-category-pink { background-color: hsl(var(--category-pink)); }
+  .bg-category-peach { background-color: hsl(var(--category-peach)); }
+  .bg-category-sky { background-color: hsl(var(--category-sky)); }
+  .bg-category-sage { background-color: hsl(var(--category-sage)); }
+  .bg-category-cream { background-color: hsl(var(--category-cream)); }
+  .bg-category-coral { background-color: hsl(var(--category-coral)); }
+
+  .text-category-mint { color: hsl(var(--category-mint)); }
+  .text-category-lavender { color: hsl(var(--category-lavender)); }
+  .text-category-pink { color: hsl(var(--category-pink)); }
+  .text-category-peach { color: hsl(var(--category-peach)); }
+
+  .bg-status-success { background-color: hsl(var(--status-success)); }
+  .bg-status-warning { background-color: hsl(var(--status-warning)); }
+  .bg-status-info { background-color: hsl(var(--status-info)); }
+  .bg-status-process { background-color: hsl(var(--status-process)); }
+
+  .gradient-primary { background: var(--gradient-primary); }
+  .gradient-glow { background: var(--gradient-glow); }
 }
