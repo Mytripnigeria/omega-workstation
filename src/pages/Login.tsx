@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { ChefHat } from "lucide-react";
 import PinPad from "@/components/PinPad";
 import StaffSelector from "@/components/StaffSelector";
+import ThemeToggle from "@/components/ThemeToggle";
 
 // Mock staff data
 const mockStaff = [
@@ -23,6 +24,16 @@ const Login = () => {
   const [selectedStaff, setSelectedStaff] = useState<typeof mockStaff[0] | null>(null);
   const [pin, setPin] = useState("");
   const [step, setStep] = useState<"select" | "pin">("select");
+
+  useEffect(() => {
+    // Initialize theme on load
+    const savedTheme = localStorage.getItem("theme");
+    if (savedTheme === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  }, []);
 
   const handleStaffSelect = (staff: typeof mockStaff[0]) => {
     setSelectedStaff(staff);
@@ -49,26 +60,31 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 relative overflow-hidden">
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden">
+      {/* Theme Toggle */}
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
+
       {/* Background glow effect */}
       <div className="absolute inset-0 gradient-glow opacity-50" />
       
       {/* Content */}
       <div className="relative z-10 w-full max-w-md">
         {/* Logo */}
-        <div className="flex flex-col items-center mb-10 animate-fade-in">
-          <div className="w-20 h-20 rounded-2xl gradient-primary flex items-center justify-center mb-4 glow-effect">
-            <ChefHat className="w-10 h-10 text-primary-foreground" />
+        <div className="flex flex-col items-center mb-8 sm:mb-10 animate-fade-in">
+          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl gradient-primary flex items-center justify-center mb-4 glow-effect">
+            <ChefHat className="w-8 h-8 sm:w-10 sm:h-10 text-primary-foreground" />
           </div>
-          <h1 className="text-3xl font-bold text-foreground">Workstation</h1>
-          <p className="text-muted-foreground mt-1">Restaurant Management</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Workstation</h1>
+          <p className="text-muted-foreground mt-1 text-sm sm:text-base">Restaurant Management</p>
         </div>
 
         {/* Card */}
-        <div className="bg-card border border-border rounded-3xl p-6 sm:p-8 shadow-xl animate-slide-up">
+        <div className="bg-card border border-border rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 shadow-xl animate-slide-up">
           {step === "select" ? (
             <>
-              <h2 className="text-xl font-semibold text-foreground text-center mb-6">
+              <h2 className="text-lg sm:text-xl font-semibold text-foreground text-center mb-4 sm:mb-6">
                 Select Staff Member
               </h2>
               <StaffSelector
@@ -86,8 +102,8 @@ const Login = () => {
                 ← Back to staff selection
               </button>
               
-              <div className="text-center mb-6">
-                <h2 className="text-xl font-semibold text-foreground">
+              <div className="text-center mb-4 sm:mb-6">
+                <h2 className="text-lg sm:text-xl font-semibold text-foreground">
                   Enter PIN
                 </h2>
                 <p className="text-muted-foreground text-sm mt-1">
@@ -101,7 +117,7 @@ const Login = () => {
                 onSubmit={handlePinSubmit}
               />
               
-              <p className="text-center text-xs text-muted-foreground mt-6">
+              <p className="text-center text-xs text-muted-foreground mt-4 sm:mt-6">
                 Demo PIN: 1234
               </p>
             </>

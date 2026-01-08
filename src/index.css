@@ -6,6 +6,72 @@
 
 @layer base {
   :root {
+    --background: 0 0% 98%;
+    --foreground: 260 20% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 260 20% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 260 20% 12%;
+
+    --primary: 320 80% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 260 15% 94%;
+    --secondary-foreground: 260 20% 20%;
+
+    --muted: 260 10% 92%;
+    --muted-foreground: 260 10% 45%;
+
+    --accent: 320 70% 45%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 260 15% 88%;
+    --input: 260 15% 92%;
+    --ring: 320 80% 50%;
+
+    --radius: 0.75rem;
+
+    /* Category pastel colors */
+    --category-mint: 165 55% 45%;
+    --category-lavender: 270 55% 55%;
+    --category-pink: 340 65% 55%;
+    --category-peach: 25 75% 55%;
+    --category-sky: 200 65% 50%;
+    --category-sage: 140 35% 45%;
+    --category-cream: 45 55% 50%;
+    --category-coral: 10 75% 55%;
+
+    /* Status colors */
+    --status-success: 145 65% 38%;
+    --status-warning: 38 92% 50%;
+    --status-info: 200 80% 50%;
+    --status-process: 320 70% 50%;
+
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(320, 80%, 50%) 0%, hsl(280, 70%, 45%) 100%);
+    --gradient-card: linear-gradient(180deg, hsl(0, 0%, 100%) 0%, hsl(260, 15%, 98%) 100%);
+    --gradient-glow: radial-gradient(ellipse at top, hsl(320, 80%, 90%, 0.5) 0%, transparent 60%);
+
+    /* Shadows */
+    --shadow-card: 0 4px 24px -4px hsl(260, 20%, 70%, 0.25);
+    --shadow-glow: 0 0 40px -10px hsl(320, 80%, 50%, 0.3);
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 260 20% 12%;
+    --sidebar-primary: 320 80% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 260 15% 94%;
+    --sidebar-accent-foreground: 260 20% 20%;
+    --sidebar-border: 260 15% 88%;
+    --sidebar-ring: 320 80% 50%;
+  }
+
+  .dark {
     --background: 260 30% 6%;
     --foreground: 0 0% 98%;
 
@@ -34,17 +100,15 @@
     --input: 260 20% 15%;
     --ring: 320 80% 55%;
 
-    --radius: 0.75rem;
-
-    /* Category pastel colors */
-    --category-mint: 165 60% 85%;
-    --category-lavender: 270 60% 88%;
-    --category-pink: 340 70% 88%;
-    --category-peach: 25 80% 88%;
-    --category-sky: 200 70% 88%;
-    --category-sage: 140 40% 85%;
-    --category-cream: 45 60% 90%;
-    --category-coral: 10 80% 85%;
+    /* Category colors - brighter for dark mode */
+    --category-mint: 165 60% 75%;
+    --category-lavender: 270 60% 78%;
+    --category-pink: 340 70% 78%;
+    --category-peach: 25 80% 78%;
+    --category-sky: 200 70% 78%;
+    --category-sage: 140 40% 75%;
+    --category-cream: 45 60% 80%;
+    --category-coral: 10 80% 75%;
 
     /* Status colors */
     --status-success: 145 65% 42%;
@@ -69,28 +133,6 @@
     --sidebar-accent-foreground: 0 0% 98%;
     --sidebar-border: 260 20% 18%;
     --sidebar-ring: 320 80% 55%;
-  }
-
-  .dark {
-    --background: 260 30% 6%;
-    --foreground: 0 0% 98%;
-    --card: 260 25% 10%;
-    --card-foreground: 0 0% 98%;
-    --popover: 260 25% 10%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 320 80% 55%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 260 20% 18%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 260 15% 20%;
-    --muted-foreground: 260 10% 60%;
-    --accent: 320 70% 50%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 260 20% 18%;
-    --input: 260 20% 15%;
-    --ring: 320 80% 55%;
   }
 }
 
@@ -153,24 +195,37 @@
 }
 
 @layer utilities {
-  .bg-category-mint { background-color: hsl(var(--category-mint)); }
-  .bg-category-lavender { background-color: hsl(var(--category-lavender)); }
-  .bg-category-pink { background-color: hsl(var(--category-pink)); }
-  .bg-category-peach { background-color: hsl(var(--category-peach)); }
-  .bg-category-sky { background-color: hsl(var(--category-sky)); }
-  .bg-category-sage { background-color: hsl(var(--category-sage)); }
-  .bg-category-cream { background-color: hsl(var(--category-cream)); }
-  .bg-category-coral { background-color: hsl(var(--category-coral)); }
+  .bg-category-mint { background-color: hsl(var(--category-mint) / 0.15); }
+  .bg-category-lavender { background-color: hsl(var(--category-lavender) / 0.15); }
+  .bg-category-pink { background-color: hsl(var(--category-pink) / 0.15); }
+  .bg-category-peach { background-color: hsl(var(--category-peach) / 0.15); }
+  .bg-category-sky { background-color: hsl(var(--category-sky) / 0.15); }
+  .bg-category-sage { background-color: hsl(var(--category-sage) / 0.15); }
+  .bg-category-cream { background-color: hsl(var(--category-cream) / 0.15); }
+  .bg-category-coral { background-color: hsl(var(--category-coral) / 0.15); }
 
   .text-category-mint { color: hsl(var(--category-mint)); }
   .text-category-lavender { color: hsl(var(--category-lavender)); }
   .text-category-pink { color: hsl(var(--category-pink)); }
   .text-category-peach { color: hsl(var(--category-peach)); }
+  .text-category-sky { color: hsl(var(--category-sky)); }
+  .text-category-sage { color: hsl(var(--category-sage)); }
+  .text-category-cream { color: hsl(var(--category-cream)); }
+  .text-category-coral { color: hsl(var(--category-coral)); }
 
   .bg-status-success { background-color: hsl(var(--status-success)); }
   .bg-status-warning { background-color: hsl(var(--status-warning)); }
   .bg-status-info { background-color: hsl(var(--status-info)); }
   .bg-status-process { background-color: hsl(var(--status-process)); }
+
+  .text-status-success { color: hsl(var(--status-success)); }
+  .text-status-warning { color: hsl(var(--status-warning)); }
+  .text-status-info { color: hsl(var(--status-info)); }
+  .text-status-process { color: hsl(var(--status-process)); }
+
+  .border-l-status-warning { border-left-color: hsl(var(--status-warning)); }
+  .border-l-status-process { border-left-color: hsl(var(--status-process)); }
+  .border-l-status-success { border-left-color: hsl(var(--status-success)); }
 
   .gradient-primary { background: var(--gradient-primary); }
   .gradient-glow { background: var(--gradient-glow); }

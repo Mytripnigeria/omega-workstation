@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Users, Plus, Clock, CheckCircle2 } from "lucide-react";
+import { Users, Plus, Clock, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import PageHeader from "@/components/PageHeader";
 
 interface Table {
   id: string;
@@ -30,7 +30,6 @@ const mockTables: Table[] = [
 ];
 
 const WaiterPage = () => {
-  const navigate = useNavigate();
   const [tables] = useState<Table[]>(mockTables);
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
 
@@ -74,41 +73,33 @@ const WaiterPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex">
+    <div className="min-h-screen bg-background flex flex-col lg:flex-row">
       {/* Main Content */}
-      <div className="flex-1 p-4 lg:p-6">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <Button variant="ghost" onClick={() => navigate("/dashboard")}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back
-          </Button>
-          <div className="flex items-center gap-2">
-            <Users className="w-5 h-5 text-category-pink" />
-            <h1 className="text-xl font-bold text-foreground">Waiter Display</h1>
-          </div>
-          <div className="flex gap-2">
-            {["available", "occupied", "reserved", "cleaning"].map((status) => (
-              <div key={status} className="flex items-center gap-1">
-                <div className={`w-3 h-3 rounded-full ${getStatusColor(status as Table["status"])}`} />
-                <span className="text-xs text-muted-foreground capitalize">{status}</span>
-              </div>
-            ))}
-          </div>
+      <div className="flex-1 p-3 sm:p-4 lg:p-6">
+        <PageHeader title="Waiter Display" icon={Users} iconColor="text-category-pink" />
+
+        {/* Status Legend */}
+        <div className="flex flex-wrap gap-2 sm:gap-4 mb-4 sm:mb-6">
+          {["available", "occupied", "reserved", "cleaning"].map((status) => (
+            <div key={status} className="flex items-center gap-1 sm:gap-2">
+              <div className={`w-3 h-3 rounded-full ${getStatusColor(status as Table["status"])}`} />
+              <span className="text-xs sm:text-sm text-muted-foreground capitalize">{status}</span>
+            </div>
+          ))}
         </div>
 
         {/* Table Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2 sm:gap-4">
           {tables.map((table) => (
             <button
               key={table.id}
               onClick={() => setSelectedTable(table)}
-              className={`relative p-4 rounded-2xl border-2 transition-all duration-200 text-left ${getTableBg(table.status)} ${
+              className={`relative p-3 sm:p-4 rounded-xl sm:rounded-2xl border-2 transition-all duration-200 text-left ${getTableBg(table.status)} ${
                 selectedTable?.id === table.id ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""
               }`}
             >
               <div className="flex items-center justify-between mb-2">
-                <span className="text-2xl font-bold text-foreground">T{table.number}</span>
+                <span className="text-xl sm:text-2xl font-bold text-foreground">T{table.number}</span>
                 <Badge className={`${getStatusColor(table.status)} text-white text-xs`}>
                   {table.seats}
                 </Badge>
@@ -116,30 +107,30 @@ const WaiterPage = () => {
               
               {table.status === "occupied" && (
                 <>
-                  <div className="flex items-center gap-1 text-sm text-muted-foreground mb-1">
+                  <div className="flex items-center gap-1 text-xs sm:text-sm text-muted-foreground mb-1">
                     <Users className="w-3 h-3" />
                     {table.guests} guests
                   </div>
-                  <div className="flex items-center gap-1 text-sm text-muted-foreground mb-2">
+                  <div className="flex items-center gap-1 text-xs sm:text-sm text-muted-foreground mb-2">
                     <Clock className="w-3 h-3" />
                     {table.time}
                   </div>
-                  <p className="text-lg font-semibold text-primary">
+                  <p className="text-base sm:text-lg font-semibold text-primary">
                     £{table.orderTotal?.toFixed(2)}
                   </p>
                 </>
               )}
               
               {table.status === "available" && (
-                <p className="text-sm text-status-success font-medium">Ready</p>
+                <p className="text-xs sm:text-sm text-status-success font-medium">Ready</p>
               )}
               
               {table.status === "reserved" && (
-                <p className="text-sm text-status-warning font-medium">7:30 PM</p>
+                <p className="text-xs sm:text-sm text-status-warning font-medium">7:30 PM</p>
               )}
               
               {table.status === "cleaning" && (
-                <p className="text-sm text-muted-foreground">In progress...</p>
+                <p className="text-xs sm:text-sm text-muted-foreground">In progress...</p>
               )}
             </button>
           ))}
@@ -148,8 +139,8 @@ const WaiterPage = () => {
 
       {/* Right Panel - Selected Table */}
       {selectedTable && (
-        <div className="w-80 bg-card border-l border-border p-6">
-          <div className="flex items-center justify-between mb-6">
+        <div className="w-full lg:w-72 xl:w-80 bg-card border-t lg:border-t-0 lg:border-l border-border p-4 sm:p-6">
+          <div className="flex items-center justify-between mb-4 sm:mb-6">
             <h2 className="text-lg font-semibold text-foreground">
               Table {selectedTable.number}
             </h2>
@@ -158,7 +149,7 @@ const WaiterPage = () => {
             </Badge>
           </div>
 
-          <div className="space-y-4 mb-6">
+          <div className="space-y-3 sm:space-y-4 mb-4 sm:mb-6">
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Seats</span>
               <span className="text-foreground">{selectedTable.seats}</span>
@@ -183,7 +174,7 @@ const WaiterPage = () => {
             )}
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-2 sm:space-y-3">
             {selectedTable.status === "available" && (
               <Button className="w-full gradient-primary">
                 <Plus className="w-4 h-4 mr-2" />
