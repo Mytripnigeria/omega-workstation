@@ -6,8 +6,6 @@ import {
   Users,
   Bike,
   BarChart3,
-  Settings,
-  TableIcon,
   LogOut,
   Clock,
   Target,
@@ -18,10 +16,9 @@ import {
   MapPin,
   LogIn,
   LogOutIcon,
+  Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import WorkstationCard from "@/components/WorkstationCard";
 import ThemeToggle from "@/components/ThemeToggle";
 import FullscreenToggle from "@/components/FullscreenToggle";
 import KPIModal from "@/components/KPIModal";
@@ -40,22 +37,28 @@ interface Staff {
   role: string;
 }
 
-const workstations = [
+interface ServiceItem {
+  title: string;
+  description: string;
+  icon: React.ElementType;
+  route: string;
+  colorClass: string;
+  iconBgClass: string;
+}
+
+const services: ServiceItem[] = [
   { title: "Counter POS", description: "Process orders and payments", icon: Monitor, route: "/pos", colorClass: "text-category-mint", iconBgClass: "bg-category-mint" },
   { title: "Kitchen Display", description: "Manage incoming orders", icon: ChefHat, route: "/kitchen", colorClass: "text-category-lavender", iconBgClass: "bg-category-lavender" },
   { title: "Waiter Display", description: "Take orders tableside", icon: Users, route: "/waiter", colorClass: "text-category-pink", iconBgClass: "bg-category-pink" },
   { title: "Delivery Rider", description: "View delivery orders", icon: Bike, route: "/delivery", colorClass: "text-category-peach", iconBgClass: "bg-category-peach" },
   { title: "Order Lobby", description: "Customer waiting display", icon: Users, route: "/lobby", colorClass: "text-category-sky", iconBgClass: "bg-category-sky" },
-  { title: "Instore", description: "Manage inventory", icon: Package, route: "/instore", colorClass: "text-category-sage", iconBgClass: "bg-category-sage" },
+  { title: "Instore", description: "Manage store inventory", icon: Package, route: "/instore", colorClass: "text-category-sage", iconBgClass: "bg-category-sage" },
   { title: "Outstore", description: "Kitchen inventory", icon: Package, route: "/outstore", colorClass: "text-category-coral", iconBgClass: "bg-category-coral" },
-  { title: "Checklist", description: "Shift tasks", icon: ClipboardCheck, route: "/checklist", colorClass: "text-category-lavender", iconBgClass: "bg-category-lavender" },
-];
-
-const quickActions = [
-  { title: "My Shifts", icon: Calendar, route: "/shifts", colorClass: "text-category-sky", iconBgClass: "bg-category-sky" },
-  { title: "Profile", icon: User, route: "/profile", colorClass: "text-category-pink", iconBgClass: "bg-category-pink" },
-  { title: "Reports", icon: BarChart3, route: "/reports", colorClass: "text-category-sage", iconBgClass: "bg-category-sage" },
-  { title: "Settings", icon: Settings, route: "/settings", colorClass: "text-category-cream", iconBgClass: "bg-category-cream" },
+  { title: "Checklist", description: "Shift tasks & duties", icon: ClipboardCheck, route: "/checklist", colorClass: "text-category-lavender", iconBgClass: "bg-category-lavender" },
+  { title: "My Shifts", description: "View your schedule", icon: Calendar, route: "/shifts", colorClass: "text-category-sky", iconBgClass: "bg-category-sky" },
+  { title: "Profile", description: "Your work profile", icon: User, route: "/profile", colorClass: "text-category-pink", iconBgClass: "bg-category-pink" },
+  { title: "Reports", description: "Performance & analytics", icon: BarChart3, route: "/reports", colorClass: "text-category-sage", iconBgClass: "bg-category-sage" },
+  { title: "Managers", description: "Overview & controls", icon: Shield, route: "/managers", colorClass: "text-category-cream", iconBgClass: "bg-category-cream" },
 ];
 
 const shiftPositions = ["Kitchen Staff", "Waiter", "Cashier", "Delivery Rider", "Supervisor"];
@@ -109,53 +112,62 @@ const Dashboard = () => {
   return (
     <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6 lg:p-8">
       {/* Header */}
-      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-        <div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+      <header className="mb-6">
+        {/* Top Row - Location & Time */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <MapPin className="w-3 h-3" />
             <span>Mr. Jollof - Makurdi</span>
           </div>
-          <div className="flex items-center gap-3 mb-1">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Clock className="w-4 h-4" />
+              <span className="text-foreground font-medium text-sm">{formatTime(currentTime)}</span>
+            </div>
+            <ThemeToggle />
+            <FullscreenToggle />
+            <Button variant="ghost" size="icon" onClick={handleLogout} className="text-muted-foreground hover:text-destructive">
+              <LogOut className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Welcome & Controls Row */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center">
               <ChefHat className="w-5 h-5 text-primary-foreground" />
             </div>
-            <h1 className="text-xl sm:text-2xl font-bold text-foreground">Workstation</h1>
+            <div>
+              <h1 className="text-lg sm:text-xl font-bold text-foreground">Workstation</h1>
+              <p className="text-muted-foreground text-sm">
+                Welcome, <span className="text-primary font-medium">{currentStaff?.name}</span>
+              </p>
+            </div>
           </div>
-          <p className="text-muted-foreground text-sm">
-            Welcome, <span className="text-primary font-medium">{currentStaff?.name}</span>
-          </p>
-        </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          <Select value={shiftPosition} onValueChange={setShiftPosition}>
-            <SelectTrigger className="w-[140px] h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {shiftPositions.map((pos) => (
-                <SelectItem key={pos} value={pos}>{pos}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button size="sm" variant={isClockedIn ? "outline" : "default"} onClick={handleClockToggle} className={isClockedIn ? "" : "gradient-primary"}>
-            {isClockedIn ? <LogOutIcon className="w-4 h-4 mr-1" /> : <LogIn className="w-4 h-4 mr-1" />}
-            {isClockedIn ? "Clock Out" : "Clock In"}
-          </Button>
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Clock className="w-4 h-4" />
-            <span className="text-foreground font-medium text-sm">{formatTime(currentTime)}</span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Select value={shiftPosition} onValueChange={setShiftPosition}>
+              <SelectTrigger className="w-[140px] h-9 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {shiftPositions.map((pos) => (
+                  <SelectItem key={pos} value={pos}>{pos}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button size="sm" variant={isClockedIn ? "outline" : "default"} onClick={handleClockToggle} className={isClockedIn ? "" : "gradient-primary"}>
+              {isClockedIn ? <LogOutIcon className="w-4 h-4 mr-1" /> : <LogIn className="w-4 h-4 mr-1" />}
+              {isClockedIn ? "Clock Out" : "Clock In"}
+            </Button>
           </div>
-          <ThemeToggle />
-          <FullscreenToggle />
-          <Button variant="ghost" size="sm" onClick={handleLogout} className="text-muted-foreground hover:text-destructive">
-            <LogOut className="w-4 h-4" />
-          </Button>
         </div>
       </header>
 
       {/* Clock Status & KPI */}
       {isClockedIn && clockInTime && (
-        <div className="bg-status-success/10 border border-status-success/30 rounded-xl p-3 mb-4 flex items-center justify-between">
+        <div className="bg-status-success/10 border border-status-success/30 rounded-xl p-3 mb-6 flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-status-success animate-pulse" />
             <span className="text-sm text-foreground">Clocked in at {formatTime(clockInTime)} as {shiftPosition}</span>
@@ -166,41 +178,38 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* Workstations */}
+      {/* Stats Summary */}
       <section className="mb-6">
-        <h2 className="text-base font-semibold text-foreground mb-3">Workstations</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-          {workstations.map((station) => (
-            <WorkstationCard key={station.title} {...station} />
-          ))}
+        <div className="bg-card border border-border rounded-2xl p-4">
+          <h3 className="text-sm font-semibold text-foreground mb-3">Today's Summary</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div><p className="text-xl sm:text-2xl font-bold text-category-mint">₦124,700</p><p className="text-xs text-muted-foreground">Total Sales</p></div>
+            <div><p className="text-xl sm:text-2xl font-bold text-category-lavender">42</p><p className="text-xs text-muted-foreground">Orders</p></div>
+            <div><p className="text-xl sm:text-2xl font-bold text-category-pink">8</p><p className="text-xs text-muted-foreground">Active Tables</p></div>
+            <div><p className="text-xl sm:text-2xl font-bold text-category-peach">5</p><p className="text-xs text-muted-foreground">Deliveries</p></div>
+          </div>
         </div>
       </section>
 
-      {/* Quick Actions */}
-      <section className="mb-6">
-        <h2 className="text-base font-semibold text-foreground mb-3">Quick Actions</h2>
-        <div className="grid grid-cols-4 gap-2">
-          {quickActions.map((action) => (
-            <button key={action.title} onClick={() => navigate(action.route)} className="bg-card border border-border rounded-xl p-3 flex flex-col items-center gap-2 hover:border-primary/50 transition-all">
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${action.iconBgClass}`}>
-                <action.icon className={`w-5 h-5 ${action.colorClass}`} />
+      {/* Services Grid */}
+      <section>
+        <h2 className="text-sm font-semibold text-foreground mb-3">Services</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+          {services.map((service) => (
+            <button
+              key={service.title}
+              onClick={() => navigate(service.route)}
+              className="bg-card border border-border rounded-xl p-4 flex flex-col items-start gap-3 hover:border-primary/50 hover:shadow-md transition-all group aspect-[4/3] min-h-[120px]"
+            >
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${service.iconBgClass}`}>
+                <service.icon className={`w-5 h-5 ${service.colorClass}`} />
               </div>
-              <span className="text-xs font-medium text-foreground">{action.title}</span>
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-1">{service.title}</h3>
+                <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{service.description}</p>
+              </div>
             </button>
           ))}
-        </div>
-      </section>
-
-      {/* Stats */}
-      <section>
-        <div className="bg-card border border-border rounded-2xl p-4">
-          <h3 className="text-base font-semibold text-foreground mb-3">Today's Summary</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div><p className="text-2xl font-bold text-category-mint">₦124,700</p><p className="text-xs text-muted-foreground">Total Sales</p></div>
-            <div><p className="text-2xl font-bold text-category-lavender">42</p><p className="text-xs text-muted-foreground">Orders</p></div>
-            <div><p className="text-2xl font-bold text-category-pink">8</p><p className="text-xs text-muted-foreground">Active Tables</p></div>
-            <div><p className="text-2xl font-bold text-category-peach">5</p><p className="text-xs text-muted-foreground">Deliveries</p></div>
-          </div>
         </div>
       </section>
 
