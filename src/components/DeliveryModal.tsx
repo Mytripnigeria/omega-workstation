@@ -16,7 +16,8 @@ interface DeliveryOrder {
   items: string[];
   total: number;
   status: "pending" | "picked_up" | "on_the_way" | "delivered";
-  estimatedTime: string;
+  startTime: Date;
+  estimatedMinutes: number;
   distance: string;
   riderName?: string;
   pickupTime?: string;
@@ -132,7 +133,7 @@ const DeliveryModal = ({ delivery, onClose, onUpdateStatus }: DeliveryModalProps
               <span className="text-muted-foreground flex items-center gap-1">
                 <Clock className="w-3 h-3" /> ETA
               </span>
-              <span className="text-foreground">{delivery.estimatedTime}</span>
+              <span className="text-foreground">{delivery.estimatedMinutes} min</span>
             </div>
             {delivery.notes && (
               <div className="text-sm">
@@ -142,7 +143,7 @@ const DeliveryModal = ({ delivery, onClose, onUpdateStatus }: DeliveryModalProps
             )}
             <div className="flex justify-between text-lg font-semibold pt-3 border-t border-border">
               <span className="text-foreground">Total</span>
-              <span className="text-primary">£{delivery.total.toFixed(2)}</span>
+              <span className="text-primary">₦{delivery.total.toLocaleString()}</span>
             </div>
           </div>
 
