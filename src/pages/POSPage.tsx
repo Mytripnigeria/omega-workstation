@@ -21,12 +21,21 @@ import {
   Bell,
   Clock,
   AlertTriangle,
+  User,
+  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import PageHeader from "@/components/PageHeader";
 import ItemVariationModal from "@/components/ItemVariationModal";
 import ConfirmDialog from "@/components/ConfirmDialog";
@@ -78,6 +87,8 @@ interface IncomingOrder {
   estimatedMinutes: number;
   status: "pending" | "confirmed" | "preparing" | "ready" | "hold";
   tableNumber?: string;
+  orderType?: "dine-in" | "takeaway" | "delivery";
+  billType?: "quick" | "process";
 }
 
 const categories = [
@@ -105,9 +116,9 @@ const menuItems: MenuItem[] = [
 ];
 
 const mockIncomingOrders: IncomingOrder[] = [
-  { id: "#ORD001", source: "pos", customerName: "Walk-in", items: [{ name: "Jollof Rice (L)", quantity: 1, price: 2500 }, { name: "Chapman", quantity: 2, price: 800 }], total: 4100, time: "2 min ago", startTime: new Date(Date.now() - 2 * 60000), estimatedMinutes: 15, status: "preparing", tableNumber: "5" },
-  { id: "#ORD002", source: "website", customerName: "Jane Okafor", items: [{ name: "Fried Rice (M)", quantity: 2, price: 2300 }, { name: "Grilled Chicken", quantity: 2, price: 2500 }], total: 9600, time: "5 min ago", startTime: new Date(Date.now() - 5 * 60000), estimatedMinutes: 20, status: "pending" },
-  { id: "#ORD003", source: "ubereats", customerName: "Mike Johnson", items: [{ name: "Beef Suya", quantity: 3, price: 1800 }], total: 5400, time: "8 min ago", startTime: new Date(Date.now() - 8 * 60000), estimatedMinutes: 12, status: "confirmed" },
+  { id: "#ORD001", source: "pos", customerName: "Walk-in", items: [{ name: "Jollof Rice (L)", quantity: 1, price: 2500 }, { name: "Chapman", quantity: 2, price: 800 }], total: 4100, time: "2 min ago", startTime: new Date(Date.now() - 2 * 60000), estimatedMinutes: 15, status: "preparing", tableNumber: "5", orderType: "dine-in", billType: "process" },
+  { id: "#ORD002", source: "website", customerName: "Jane Okafor", items: [{ name: "Fried Rice (M)", quantity: 2, price: 2300 }, { name: "Grilled Chicken", quantity: 2, price: 2500 }], total: 9600, time: "5 min ago", startTime: new Date(Date.now() - 5 * 60000), estimatedMinutes: 20, status: "pending", orderType: "delivery", billType: "process" },
+  { id: "#ORD003", source: "ubereats", customerName: "Mike Johnson", items: [{ name: "Beef Suya", quantity: 3, price: 1800 }], total: 5400, time: "8 min ago", startTime: new Date(Date.now() - 8 * 60000), estimatedMinutes: 12, status: "confirmed", orderType: "delivery", billType: "process" },
 ];
 
 const mockOrderHistory = [
@@ -130,6 +141,10 @@ const POSPage = () => {
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; description: string; action: () => void }>({ open: false, title: "", description: "", action: () => {} });
   const [toast, setToast] = useState<{ open: boolean; type: "success" | "error" | "warning" | "info"; title: string; message?: string }>({ open: false, type: "success", title: "" });
   const [currentReceipt, setCurrentReceipt] = useState<IncomingOrder | null>(null);
+  
+  // Order details
+  const [orderType, setOrderType] = useState<"dine-in" | "takeaway" | "delivery">("dine-in");
+  const [customerName, setCustomerName] = useState("");
 
   const playBeep = useBeepSound();
 
@@ -172,14 +187,44 @@ const POSPage = () => {
   const tax = (subtotal - discount) * 0.075;
   const total = subtotal - discount + tax;
 
-  const sendToKitchen = () => {
+  // Quick Bill - completes immediately without going to kitchen
+  const handleQuickBill = () => {
     if (cart.length === 0) return;
     setConfirmDialog({
-      open: true, title: "Send to Kitchen", description: "Are you sure you want to send this order to the kitchen?",
+      open: true, title: "Quick Bill", description: "This will complete the order immediately without sending to kitchen. Continue?",
       action: () => {
+        setToast({ open: true, type: "success", title: "Order Completed!", message: "Quick bill has been processed" });
+        setCart([]);
+        setDiscount(0);
+        setCustomerName("");
+      }
+    });
+  };
+
+  // Process Bill - sends to kitchen
+  const handleProcessBill = () => {
+    if (cart.length === 0) return;
+    setConfirmDialog({
+      open: true, title: "Process Bill", description: "This will send the order to the kitchen for preparation. Continue?",
+      action: () => {
+        const newOrder: IncomingOrder = {
+          id: `#ORD${Date.now().toString().slice(-4)}`,
+          source: "pos",
+          customerName: customerName || "Walk-in",
+          items: cart.map((c) => ({ name: c.name, quantity: c.quantity, price: c.price })),
+          total: total,
+          time: "Just now",
+          startTime: new Date(),
+          estimatedMinutes: 15,
+          status: "preparing",
+          orderType,
+          billType: "process",
+        };
+        setIncomingOrders((prev) => [newOrder, ...prev]);
         setToast({ open: true, type: "success", title: "Order Sent!", message: "Order has been sent to the kitchen" });
         setCart([]);
         setDiscount(0);
+        setCustomerName("");
       }
     });
   };
@@ -189,17 +234,19 @@ const POSPage = () => {
     const holdOrder: IncomingOrder = {
       id: `#HOLD${Date.now().toString().slice(-4)}`,
       source: "pos",
-      customerName: "Hold Order",
+      customerName: customerName || "Hold Order",
       items: cart.map((c) => ({ name: c.name, quantity: c.quantity, price: c.price })),
       total: total,
       time: "Just now",
       startTime: new Date(),
       estimatedMinutes: 0,
       status: "hold",
+      orderType,
     };
     setIncomingOrders((prev) => [holdOrder, ...prev]);
     setCart([]);
     setDiscount(0);
+    setCustomerName("");
     setToast({ open: true, type: "info", title: "Order Held", message: "Order saved. Click to restore." });
   };
 
@@ -213,6 +260,12 @@ const POSPage = () => {
             if (menuItem) addToCart(menuItem, {});
           }
         });
+        if (order.customerName && order.customerName !== "Walk-in" && order.customerName !== "Hold Order") {
+          setCustomerName(order.customerName);
+        }
+        if (order.orderType) {
+          setOrderType(order.orderType);
+        }
         setIncomingOrders((prev) => prev.filter((o) => o.id !== order.id));
       }
     });
@@ -238,6 +291,15 @@ const POSPage = () => {
       case "preparing": return "bg-status-process text-white";
       case "ready": return "bg-status-success text-white";
       case "hold": return "bg-muted text-muted-foreground";
+    }
+  };
+
+  const getOrderTypeLabel = (type?: string) => {
+    switch (type) {
+      case "dine-in": return "Dine In";
+      case "takeaway": return "Takeaway";
+      case "delivery": return "Delivery";
+      default: return "";
     }
   };
 
@@ -307,7 +369,7 @@ const POSPage = () => {
                     <div key={order.id} className="bg-muted/30 border border-border rounded-lg p-3 flex items-center justify-between">
                       <div>
                         <span className="font-medium text-foreground">{order.id}</span>
-                        <p className="text-sm text-muted-foreground">₦{order.total.toLocaleString()}</p>
+                        <p className="text-sm text-muted-foreground">₦{order.total.toLocaleString()} {order.orderType && `• ${getOrderTypeLabel(order.orderType)}`}</p>
                       </div>
                       <Button size="sm" variant="outline" onClick={() => recallOrder(order)}><RotateCcw className="w-4 h-4 mr-1" />Restore</Button>
                     </div>
@@ -324,6 +386,7 @@ const POSPage = () => {
                     <Badge variant="outline" className="flex items-center gap-1">{getSourceIcon(order.source)}{order.source.toUpperCase()}</Badge>
                     <span className="font-semibold text-foreground">{order.id}</span>
                     {order.tableNumber && <Badge variant="secondary">Table {order.tableNumber}</Badge>}
+                    {order.orderType && <Badge variant="outline">{getOrderTypeLabel(order.orderType)}</Badge>}
                   </div>
                   <div className="flex items-center gap-2">
                     {(order.status === "preparing" || order.status === "confirmed") && (
@@ -365,6 +428,31 @@ const POSPage = () => {
           <Button size="sm" variant="ghost" onClick={() => setShowHistoryModal(true)}><History className="w-4 h-4" /></Button>
         </div>
 
+        {/* Order Type & Customer */}
+        <div className="space-y-3 mb-4 pb-4 border-b border-border">
+          <div className="flex gap-2">
+            <Select value={orderType} onValueChange={(v: "dine-in" | "takeaway" | "delivery") => setOrderType(v)}>
+              <SelectTrigger className="flex-1 h-9">
+                <SelectValue placeholder="Order Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="dine-in">Dine In</SelectItem>
+                <SelectItem value="takeaway">Takeaway</SelectItem>
+                <SelectItem value="delivery">Delivery</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="relative">
+            <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input 
+              placeholder="Customer name (optional)" 
+              value={customerName} 
+              onChange={(e) => setCustomerName(e.target.value)}
+              className="pl-10 h-9"
+            />
+          </div>
+        </div>
+
         <div className="flex-1 overflow-auto space-y-2 mb-4">
           {cart.length === 0 ? (
             <div className="text-center text-muted-foreground py-6"><ShoppingCart className="w-10 h-10 mx-auto mb-3 opacity-50" /><p>No items in cart</p></div>
@@ -400,12 +488,17 @@ const POSPage = () => {
           <Percent className="w-4 h-4 mr-2" />{discount > 0 ? `Discount: ₦${discount.toLocaleString()}` : "Add Discount"}
         </Button>
 
-        {/* Action Buttons */}
+        {/* Bill Type Buttons */}
         <div className="grid grid-cols-2 gap-2 mb-2">
-          <Button variant="secondary" className="h-10" disabled={cart.length === 0} onClick={sendToKitchen}><ChefHat className="w-4 h-4 mr-1" />Kitchen</Button>
-          <Button variant="outline" className="h-10" disabled={cart.length === 0} onClick={holdOrder}><Pause className="w-4 h-4 mr-1" />Hold</Button>
+          <Button variant="outline" className="h-10" disabled={cart.length === 0} onClick={handleQuickBill}>
+            <Zap className="w-4 h-4 mr-1" />Quick Bill
+          </Button>
+          <Button variant="secondary" className="h-10" disabled={cart.length === 0} onClick={handleProcessBill}>
+            <ChefHat className="w-4 h-4 mr-1" />Process Bill
+          </Button>
         </div>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
+          <Button variant="outline" className="h-10" disabled={cart.length === 0} onClick={holdOrder}><Pause className="w-4 h-4" /></Button>
           <Button variant="secondary" className="h-10" disabled={cart.length === 0}><Banknote className="w-4 h-4 mr-1" />Cash</Button>
           <Button className="h-10 gradient-primary" disabled={cart.length === 0}><CreditCard className="w-4 h-4 mr-1" />Card</Button>
         </div>

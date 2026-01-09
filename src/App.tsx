@@ -16,6 +16,8 @@ import OutstorePage from "./pages/OutstorePage";
 import ChecklistPage from "./pages/ChecklistPage";
 import ShiftsPage from "./pages/ShiftsPage";
 import ProfilePage from "./pages/ProfilePage";
+import ReportsPage from "./pages/ReportsPage";
+import ManagersPage from "./pages/ManagersPage";
 import PlaceholderPage from "./pages/PlaceholderPage";
 import NotFound from "./pages/NotFound";
 
@@ -41,8 +43,9 @@ const App = () => (
           <Route path="/checklist" element={<ChecklistPage />} />
           <Route path="/shifts" element={<ShiftsPage />} />
           <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/managers" element={<ManagersPage />} />
           <Route path="/tables" element={<PlaceholderPage />} />
-          <Route path="/reports" element={<PlaceholderPage />} />
           <Route path="/settings" element={<PlaceholderPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
