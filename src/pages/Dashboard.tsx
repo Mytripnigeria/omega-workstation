@@ -6,7 +6,6 @@ import {
   Users,
   Bike,
   BarChart3,
-  LogOut,
   Clock,
   Target,
   Package,
@@ -126,7 +125,7 @@ const Dashboard = () => {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Main Content */}
-      <div className="flex-1 p-4 sm:p-6 lg:p-8 pb-24">
+      <div className="flex-1 p-4 sm:p-6 lg:p-8">
         {/* Header */}
         <header className="mb-6">
           {/* Top Row - Location, Time & Sync Status */}
@@ -245,19 +244,6 @@ const Dashboard = () => {
             ))}
           </div>
         </section>
-      </div>
-
-      {/* Sticky Footer - Sign In Quick Access (Only on Dashboard) */}
-      <div className="fixed bottom-0 left-0 right-0 bg-card/80 backdrop-blur-lg border-t border-border p-3 flex justify-center gap-3 safe-area-bottom z-50">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleLogout}
-          className="text-muted-foreground hover:text-destructive"
-        >
-          <LogOut className="w-4 h-4 mr-2" />
-          Sign Out
-        </Button>
       </div>
 
       <KPIModal open={showKPI} onClose={() => setShowKPI(false)} />

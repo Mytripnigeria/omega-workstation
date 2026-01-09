@@ -27,6 +27,7 @@ import {
   Copy,
   Check,
   X,
+  Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -151,6 +152,7 @@ const POSPage = () => {
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [selfServiceReceipt, setSelfServiceReceipt] = useState<IncomingOrder | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; description: string; action: () => void }>({ open: false, title: "", description: "", action: () => {} });
   const [toast, setToast] = useState<{ open: boolean; type: "success" | "error" | "warning" | "info"; title: string; message?: string }>({ open: false, type: "success", title: "" });
   const [currentReceipt, setCurrentReceipt] = useState<IncomingOrder | null>(null);
@@ -272,6 +274,9 @@ const POSPage = () => {
     };
     setIncomingOrders((prev) => [newOrder, ...prev]);
     setShowPaymentModal(false);
+    // Show receipt for self-service
+    setSelfServiceReceipt(newOrder);
+    setShowReceiptModal(true);
     setToast({ open: true, type: "success", title: "Order Placed!", message: "Your order has been sent to the counter" });
     setCart([]);
     setDiscount(0);
@@ -370,23 +375,25 @@ const POSPage = () => {
         <div className="flex items-center justify-between mb-4">
           <PageHeader title={posMode === "counter" ? "Counter POS" : "Self-Service"} icon={Monitor} iconColor="text-category-mint" />
           
-          {/* Mode Toggle */}
-          <div className="flex items-center gap-2 bg-card border border-border rounded-lg p-1">
+          {/* Mode Toggle - Icon Only */}
+          <div className="flex items-center bg-card border border-border rounded-lg p-1">
             <button
               onClick={() => setPosMode("counter")}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                posMode === "counter" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+              className={`p-2 rounded-md transition-all ${
+                posMode === "counter" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"
               }`}
+              title="Counter Mode"
             >
-              Counter
+              <Monitor className="w-4 h-4" />
             </button>
             <button
               onClick={() => setPosMode("selfservice")}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                posMode === "selfservice" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+              className={`p-2 rounded-md transition-all ${
+                posMode === "selfservice" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"
               }`}
+              title="Self-Service Mode"
             >
-              Self-Service
+              <Users className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -672,7 +679,8 @@ const POSPage = () => {
       <ToastNotification open={toast.open} onClose={() => setToast({ ...toast, open: false })} type={toast.type} title={toast.title} message={toast.message} />
       <DiscountModal open={showDiscountModal} onClose={() => setShowDiscountModal(false)} subtotal={subtotal} onApplyDiscount={setDiscount} />
       <OrderHistoryModal open={showHistoryModal} onClose={() => setShowHistoryModal(false)} orders={mockOrderHistory} onRecallOrder={(o) => { }} onPrintReceipt={(o) => { }} />
-      {currentReceipt && <ReceiptModal open={showReceiptModal} onClose={() => setShowReceiptModal(false)} orderId={currentReceipt.id} items={currentReceipt.items} subtotal={currentReceipt.total * 0.925} tax={currentReceipt.total * 0.075} total={currentReceipt.total} customerName={currentReceipt.customerName} />}
+      {currentReceipt && <ReceiptModal open={showReceiptModal} onClose={() => { setShowReceiptModal(false); setCurrentReceipt(null); setSelfServiceReceipt(null); }} orderId={currentReceipt.id} items={currentReceipt.items} subtotal={currentReceipt.total * 0.925} tax={currentReceipt.total * 0.075} total={currentReceipt.total} customerName={currentReceipt.customerName} />}
+      {selfServiceReceipt && !currentReceipt && <ReceiptModal open={showReceiptModal} onClose={() => { setShowReceiptModal(false); setSelfServiceReceipt(null); }} orderId={selfServiceReceipt.id} items={selfServiceReceipt.items} subtotal={selfServiceReceipt.total * 0.925} tax={selfServiceReceipt.total * 0.075} total={selfServiceReceipt.total} customerName={selfServiceReceipt.customerName} />}
     </div>
   );
 };
