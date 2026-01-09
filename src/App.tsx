@@ -9,6 +9,12 @@ import POSPage from "./pages/POSPage";
 import KitchenPage from "./pages/KitchenPage";
 import WaiterPage from "./pages/WaiterPage";
 import DeliveryPage from "./pages/DeliveryPage";
+import LobbyPage from "./pages/LobbyPage";
+import InstorePage from "./pages/InstorePage";
+import OutstorePage from "./pages/OutstorePage";
+import ChecklistPage from "./pages/ChecklistPage";
+import ShiftsPage from "./pages/ShiftsPage";
+import ProfilePage from "./pages/ProfilePage";
 import PlaceholderPage from "./pages/PlaceholderPage";
 import NotFound from "./pages/NotFound";
 
@@ -27,6 +33,12 @@ const App = () => (
           <Route path="/kitchen" element={<KitchenPage />} />
           <Route path="/waiter" element={<WaiterPage />} />
           <Route path="/delivery" element={<DeliveryPage />} />
+          <Route path="/lobby" element={<LobbyPage />} />
+          <Route path="/instore" element={<InstorePage />} />
+          <Route path="/outstore" element={<OutstorePage />} />
+          <Route path="/checklist" element={<ChecklistPage />} />
+          <Route path="/shifts" element={<ShiftsPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
           <Route path="/tables" element={<PlaceholderPage />} />
           <Route path="/reports" element={<PlaceholderPage />} />
           <Route path="/settings" element={<PlaceholderPage />} />
