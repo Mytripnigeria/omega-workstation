@@ -23,6 +23,10 @@ import {
   AlertTriangle,
   User,
   Zap,
+  Wallet,
+  Copy,
+  Check,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +40,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import PageHeader from "@/components/PageHeader";
 import ItemVariationModal from "@/components/ItemVariationModal";
 import ConfirmDialog from "@/components/ConfirmDialog";
@@ -63,6 +73,7 @@ interface MenuItem {
   name: string;
   price: number;
   category: string;
+  image?: string;
   variations?: VariationGroup[];
 }
 
@@ -78,7 +89,7 @@ interface CartItem {
 
 interface IncomingOrder {
   id: string;
-  source: "pos" | "website" | "ubereats" | "deliveroo";
+  source: "pos" | "website" | "ubereats" | "deliveroo" | "selfservice";
   customerName: string;
   items: { name: string; quantity: number; price: number }[];
   total: number;
@@ -101,18 +112,18 @@ const categories = [
 ];
 
 const menuItems: MenuItem[] = [
-  { id: "1", name: "Jollof Rice", price: 1500, category: "jollof", variations: [{ name: "Size", required: true, options: [{ id: "s1", name: "Small", priceModifier: 0 }, { id: "s2", name: "Medium", priceModifier: 500 }, { id: "s3", name: "Large", priceModifier: 1000 }] }] },
-  { id: "2", name: "Fried Rice", price: 1800, category: "rice", variations: [{ name: "Size", required: true, options: [{ id: "s1", name: "Small", priceModifier: 0 }, { id: "s2", name: "Medium", priceModifier: 500 }, { id: "s3", name: "Large", priceModifier: 1000 }] }] },
-  { id: "3", name: "White Rice", price: 1200, category: "rice" },
-  { id: "4", name: "Grilled Chicken", price: 2500, category: "protein" },
-  { id: "5", name: "Fried Fish", price: 2000, category: "protein" },
-  { id: "6", name: "Beef Suya", price: 1800, category: "protein" },
-  { id: "7", name: "Plantain", price: 500, category: "sides" },
-  { id: "8", name: "Coleslaw", price: 400, category: "sides" },
-  { id: "9", name: "Moi Moi", price: 600, category: "sides" },
-  { id: "10", name: "Chapman", price: 800, category: "drinks", variations: [{ name: "Size", required: false, options: [{ id: "d1", name: "Regular", priceModifier: 0 }, { id: "d2", name: "Large", priceModifier: 300 }] }] },
-  { id: "11", name: "Zobo", price: 500, category: "drinks" },
-  { id: "12", name: "Water", price: 200, category: "drinks" },
+  { id: "1", name: "Jollof Rice", price: 1500, category: "jollof", image: "🍚", variations: [{ name: "Size", required: true, options: [{ id: "s1", name: "Small", priceModifier: 0 }, { id: "s2", name: "Medium", priceModifier: 500 }, { id: "s3", name: "Large", priceModifier: 1000 }] }] },
+  { id: "2", name: "Fried Rice", price: 1800, category: "rice", image: "🍛", variations: [{ name: "Size", required: true, options: [{ id: "s1", name: "Small", priceModifier: 0 }, { id: "s2", name: "Medium", priceModifier: 500 }, { id: "s3", name: "Large", priceModifier: 1000 }] }] },
+  { id: "3", name: "White Rice", price: 1200, category: "rice", image: "🍚" },
+  { id: "4", name: "Grilled Chicken", price: 2500, category: "protein", image: "🍗" },
+  { id: "5", name: "Fried Fish", price: 2000, category: "protein", image: "🐟" },
+  { id: "6", name: "Beef Suya", price: 1800, category: "protein", image: "🥩" },
+  { id: "7", name: "Plantain", price: 500, category: "sides", image: "🍌" },
+  { id: "8", name: "Coleslaw", price: 400, category: "sides", image: "🥗" },
+  { id: "9", name: "Moi Moi", price: 600, category: "sides", image: "🫘" },
+  { id: "10", name: "Chapman", price: 800, category: "drinks", image: "🍹", variations: [{ name: "Size", required: false, options: [{ id: "d1", name: "Regular", priceModifier: 0 }, { id: "d2", name: "Large", priceModifier: 300 }] }] },
+  { id: "11", name: "Zobo", price: 500, category: "drinks", image: "🧃" },
+  { id: "12", name: "Water", price: 200, category: "drinks", image: "💧" },
 ];
 
 const mockIncomingOrders: IncomingOrder[] = [
@@ -127,6 +138,7 @@ const mockOrderHistory = [
 ];
 
 const POSPage = () => {
+  const [posMode, setPosMode] = useState<"counter" | "selfservice">("counter");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -138,13 +150,22 @@ const POSPage = () => {
   const [showDiscountModal, setShowDiscountModal] = useState(false);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; description: string; action: () => void }>({ open: false, title: "", description: "", action: () => {} });
   const [toast, setToast] = useState<{ open: boolean; type: "success" | "error" | "warning" | "info"; title: string; message?: string }>({ open: false, type: "success", title: "" });
   const [currentReceipt, setCurrentReceipt] = useState<IncomingOrder | null>(null);
+  const [copied, setCopied] = useState(false);
   
   // Order details
   const [orderType, setOrderType] = useState<"dine-in" | "takeaway" | "delivery">("dine-in");
   const [customerName, setCustomerName] = useState("");
+
+  // Virtual account for self-service
+  const virtualAccount = {
+    bank: "Wema Bank",
+    accountNumber: "8234567890",
+    accountName: "Mr Jollof Foods Ltd",
+  };
 
   const playBeep = useBeepSound();
 
@@ -229,6 +250,40 @@ const POSPage = () => {
     });
   };
 
+  // Self-service payment
+  const handleSelfServicePay = () => {
+    if (cart.length === 0) return;
+    setShowPaymentModal(true);
+  };
+
+  const handlePaymentConfirmed = () => {
+    const newOrder: IncomingOrder = {
+      id: `#SS${Date.now().toString().slice(-4)}`,
+      source: "selfservice",
+      customerName: customerName || "Self-Service",
+      items: cart.map((c) => ({ name: c.name, quantity: c.quantity, price: c.price })),
+      total: total,
+      time: "Just now",
+      startTime: new Date(),
+      estimatedMinutes: 15,
+      status: "pending",
+      orderType: "takeaway",
+      billType: "process",
+    };
+    setIncomingOrders((prev) => [newOrder, ...prev]);
+    setShowPaymentModal(false);
+    setToast({ open: true, type: "success", title: "Order Placed!", message: "Your order has been sent to the counter" });
+    setCart([]);
+    setDiscount(0);
+    setCustomerName("");
+  };
+
+  const copyAccountNumber = () => {
+    navigator.clipboard.writeText(virtualAccount.accountNumber);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   const holdOrder = () => {
     if (cart.length === 0) return;
     const holdOrder: IncomingOrder = {
@@ -280,6 +335,7 @@ const POSPage = () => {
     switch (source) {
       case "pos": return <Monitor className="w-4 h-4" />;
       case "website": return <Globe className="w-4 h-4" />;
+      case "selfservice": return <Smartphone className="w-4 h-4" />;
       default: return <Smartphone className="w-4 h-4" />;
     }
   };
@@ -310,166 +366,207 @@ const POSPage = () => {
   return (
     <div className="min-h-screen bg-background flex flex-col lg:flex-row">
       {/* Left Panel */}
-      <div className="flex-1 p-3 sm:p-4 lg:p-6 overflow-auto">
-        <PageHeader title="Counter POS" icon={Monitor} iconColor="text-category-mint" />
-
-        {/* Auto Accept Toggle */}
-        <div className="flex items-center justify-between bg-card border border-border rounded-lg p-3 mb-4">
-          <div className="flex items-center gap-2">
-            <Bell className="w-4 h-4 text-primary" />
-            <span className="text-sm font-medium text-foreground">Auto Accept Orders</span>
+      <div className="flex-1 p-4 sm:p-6 overflow-auto">
+        <div className="flex items-center justify-between mb-4">
+          <PageHeader title={posMode === "counter" ? "Counter POS" : "Self-Service"} icon={Monitor} iconColor="text-category-mint" />
+          
+          {/* Mode Toggle */}
+          <div className="flex items-center gap-2 bg-card border border-border rounded-lg p-1">
+            <button
+              onClick={() => setPosMode("counter")}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                posMode === "counter" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Counter
+            </button>
+            <button
+              onClick={() => setPosMode("selfservice")}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                posMode === "selfservice" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Self-Service
+            </button>
           </div>
-          <Switch checked={autoAccept} onCheckedChange={setAutoAccept} />
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-4">
-          <TabsList className="w-full sm:w-auto">
-            <TabsTrigger value="menu" className="flex-1 sm:flex-none"><Utensils className="w-4 h-4 mr-2" />Menu</TabsTrigger>
-            <TabsTrigger value="orders" className="flex-1 sm:flex-none"><ListOrdered className="w-4 h-4 mr-2" />Orders<Badge variant="secondary" className="ml-2">{incomingOrders.length}</Badge></TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="menu" className="mt-4">
-            <div className="relative mb-4">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder="Search menu items..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
+        {/* Counter Mode Only - Auto Accept & Orders Tab */}
+        {posMode === "counter" && (
+          <>
+            <div className="flex items-center justify-between bg-card border border-border rounded-lg p-3 mb-4">
+              <div className="flex items-center gap-2">
+                <Bell className="w-4 h-4 text-primary" />
+                <span className="text-sm font-medium text-foreground">Auto Accept Orders</span>
+              </div>
+              <Switch checked={autoAccept} onCheckedChange={setAutoAccept} />
             </div>
 
-            <div className="flex gap-2 overflow-x-auto pb-2 mb-4 scrollbar-hide">
-              {categories.map((cat) => (
-                <button key={cat.id} onClick={() => setSelectedCategory(cat.id)} className={`flex items-center gap-2 px-3 py-2 rounded-lg whitespace-nowrap transition-all ${selectedCategory === cat.id ? "bg-primary text-primary-foreground" : "bg-card border border-border hover:border-primary/50"}`}>
-                  <span>{cat.icon}</span>
-                  <span className="text-sm font-medium">{cat.name}</span>
-                </button>
-              ))}
-            </div>
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-4">
+              <TabsList className="w-full sm:w-auto">
+                <TabsTrigger value="menu" className="flex-1 sm:flex-none"><Utensils className="w-4 h-4 mr-2" />Menu</TabsTrigger>
+                <TabsTrigger value="orders" className="flex-1 sm:flex-none"><ListOrdered className="w-4 h-4 mr-2" />Orders<Badge variant="secondary" className="ml-2">{incomingOrders.length}</Badge></TabsTrigger>
+              </TabsList>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              {filteredItems.map((item) => (
-                <button key={item.id} onClick={() => handleItemClick(item)} className="bg-card border border-border rounded-xl p-3 text-left hover:border-primary/50 transition-all group">
-                  <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-secondary mb-2">
-                    <Utensils className="w-5 h-5 text-muted-foreground" />
+              <TabsContent value="menu" className="mt-4">
+                <MenuGrid 
+                  searchQuery={searchQuery}
+                  setSearchQuery={setSearchQuery}
+                  selectedCategory={selectedCategory}
+                  setSelectedCategory={setSelectedCategory}
+                  filteredItems={filteredItems}
+                  handleItemClick={handleItemClick}
+                  isSelfService={false}
+                />
+              </TabsContent>
+
+              <TabsContent value="orders" className="mt-4 space-y-4">
+                {/* Hold Orders */}
+                {holdOrders.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-2"><Pause className="w-4 h-4" />On Hold ({holdOrders.length})</h3>
+                    <div className="space-y-2">
+                      {holdOrders.map((order) => (
+                        <div key={order.id} className="bg-muted/30 border border-border rounded-lg p-3 flex items-center justify-between">
+                          <div>
+                            <span className="font-medium text-foreground">{order.id}</span>
+                            <p className="text-sm text-muted-foreground">₦{order.total.toLocaleString()} {order.orderType && `• ${getOrderTypeLabel(order.orderType)}`}</p>
+                          </div>
+                          <Button size="sm" variant="outline" onClick={() => recallOrder(order)}><RotateCcw className="w-4 h-4 mr-1" />Restore</Button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <h3 className="font-medium text-foreground text-xs group-hover:text-primary line-clamp-2">{item.name}</h3>
-                  <div className="flex items-center gap-2 mt-1">
-                    <p className="text-primary font-semibold text-sm">₦{item.price.toLocaleString()}</p>
-                    {item.variations && <Badge variant="outline" className="text-xs">+Options</Badge>}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </TabsContent>
+                )}
 
-          <TabsContent value="orders" className="mt-4 space-y-4">
-            {/* Hold Orders */}
-            {holdOrders.length > 0 && (
-              <div>
-                <h3 className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-2"><Pause className="w-4 h-4" />On Hold ({holdOrders.length})</h3>
-                <div className="space-y-2">
-                  {holdOrders.map((order) => (
-                    <div key={order.id} className="bg-muted/30 border border-border rounded-lg p-3 flex items-center justify-between">
-                      <div>
-                        <span className="font-medium text-foreground">{order.id}</span>
-                        <p className="text-sm text-muted-foreground">₦{order.total.toLocaleString()} {order.orderType && `• ${getOrderTypeLabel(order.orderType)}`}</p>
+                {/* Active Orders */}
+                {activeOrders.map((order) => (
+                  <div key={order.id} className="bg-card border border-border rounded-xl p-4">
+                    <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="flex items-center gap-1">{getSourceIcon(order.source)}{order.source.toUpperCase()}</Badge>
+                        <span className="font-semibold text-foreground">{order.id}</span>
+                        {order.tableNumber && <Badge variant="secondary">Table {order.tableNumber}</Badge>}
+                        {order.orderType && <Badge variant="outline">{getOrderTypeLabel(order.orderType)}</Badge>}
                       </div>
-                      <Button size="sm" variant="outline" onClick={() => recallOrder(order)}><RotateCcw className="w-4 h-4 mr-1" />Restore</Button>
+                      <div className="flex items-center gap-2">
+                        {(order.status === "preparing" || order.status === "confirmed") && (
+                          <CountdownTimer targetMinutes={order.estimatedMinutes} startTime={order.startTime} />
+                        )}
+                        <Badge className={getStatusColor(order.status)}>{order.status}</Badge>
+                      </div>
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
+                    <p className="text-sm text-muted-foreground mb-2">{order.customerName} • {order.time}</p>
+                    <div className="space-y-1 mb-3">
+                      {order.items.map((item, idx) => (
+                        <div key={idx} className="flex items-center justify-between text-sm">
+                          <span className="text-foreground">{item.quantity}x {item.name}</span>
+                          <span className="text-muted-foreground">₦{(item.price * item.quantity).toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex items-center justify-between pt-3 border-t border-border">
+                      <span className="font-semibold text-foreground">Total: ₦{order.total.toLocaleString()}</span>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" onClick={() => printReceipt(order)}><Printer className="w-4 h-4" /></Button>
+                        {order.status === "pending" && <Button size="sm" onClick={() => setIncomingOrders((prev) => prev.map((o) => o.id === order.id ? { ...o, status: "confirmed" } : o))}>Confirm</Button>}
+                        {order.status === "confirmed" && <Button size="sm" className="gradient-primary" onClick={() => setIncomingOrders((prev) => prev.map((o) => o.id === order.id ? { ...o, status: "preparing" } : o))}><ChefHat className="w-4 h-4 mr-1" />Kitchen</Button>}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </TabsContent>
+            </Tabs>
+          </>
+        )}
 
-            {/* Active Orders */}
-            {activeOrders.map((order) => (
-              <div key={order.id} className="bg-card border border-border rounded-xl p-4">
-                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="flex items-center gap-1">{getSourceIcon(order.source)}{order.source.toUpperCase()}</Badge>
-                    <span className="font-semibold text-foreground">{order.id}</span>
-                    {order.tableNumber && <Badge variant="secondary">Table {order.tableNumber}</Badge>}
-                    {order.orderType && <Badge variant="outline">{getOrderTypeLabel(order.orderType)}</Badge>}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {(order.status === "preparing" || order.status === "confirmed") && (
-                      <CountdownTimer targetMinutes={order.estimatedMinutes} startTime={order.startTime} />
-                    )}
-                    <Badge className={getStatusColor(order.status)}>{order.status}</Badge>
-                  </div>
-                </div>
-                <p className="text-sm text-muted-foreground mb-2">{order.customerName} • {order.time}</p>
-                <div className="space-y-1 mb-3">
-                  {order.items.map((item, idx) => (
-                    <div key={idx} className="flex items-center justify-between text-sm">
-                      <span className="text-foreground">{item.quantity}x {item.name}</span>
-                      <span className="text-muted-foreground">₦{(item.price * item.quantity).toLocaleString()}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex items-center justify-between pt-3 border-t border-border">
-                  <span className="font-semibold text-foreground">Total: ₦{order.total.toLocaleString()}</span>
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="outline" onClick={() => printReceipt(order)}><Printer className="w-4 h-4" /></Button>
-                    {order.status === "pending" && <Button size="sm" onClick={() => setIncomingOrders((prev) => prev.map((o) => o.id === order.id ? { ...o, status: "confirmed" } : o))}>Confirm</Button>}
-                    {order.status === "confirmed" && <Button size="sm" className="gradient-primary" onClick={() => setIncomingOrders((prev) => prev.map((o) => o.id === order.id ? { ...o, status: "preparing" } : o))}><ChefHat className="w-4 h-4 mr-1" />Kitchen</Button>}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </TabsContent>
-        </Tabs>
+        {/* Self-Service Mode - Just Menu */}
+        {posMode === "selfservice" && (
+          <MenuGrid 
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            selectedCategory={selectedCategory}
+            setSelectedCategory={setSelectedCategory}
+            filteredItems={filteredItems}
+            handleItemClick={handleItemClick}
+            isSelfService={true}
+          />
+        )}
       </div>
 
       {/* Right Panel - Cart */}
-      <div className="w-full lg:w-80 xl:w-96 bg-card border-t lg:border-t-0 lg:border-l border-border p-3 sm:p-4 flex flex-col max-h-[50vh] lg:max-h-screen lg:h-screen">
+      <div className="w-full lg:w-80 xl:w-96 bg-card border-t lg:border-t-0 lg:border-l border-border p-4 flex flex-col max-h-[50vh] lg:max-h-screen lg:h-screen">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <ShoppingCart className="w-5 h-5 text-primary" />
-            <h2 className="text-lg font-semibold text-foreground">Current Order</h2>
+            <h2 className="text-lg font-semibold text-foreground">
+              {posMode === "selfservice" ? "Your Order" : "Current Order"}
+            </h2>
           </div>
-          <Button size="sm" variant="ghost" onClick={() => setShowHistoryModal(true)}><History className="w-4 h-4" /></Button>
+          {posMode === "counter" && (
+            <Button size="sm" variant="ghost" onClick={() => setShowHistoryModal(true)}><History className="w-4 h-4" /></Button>
+          )}
         </div>
 
-        {/* Order Type & Customer */}
-        <div className="space-y-3 mb-4 pb-4 border-b border-border">
-          <div className="flex gap-2">
-            <Select value={orderType} onValueChange={(v: "dine-in" | "takeaway" | "delivery") => setOrderType(v)}>
-              <SelectTrigger className="flex-1 h-9">
-                <SelectValue placeholder="Order Type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="dine-in">Dine In</SelectItem>
-                <SelectItem value="takeaway">Takeaway</SelectItem>
-                <SelectItem value="delivery">Delivery</SelectItem>
-              </SelectContent>
-            </Select>
+        {/* Order Type & Customer - Counter Mode Only */}
+        {posMode === "counter" && (
+          <div className="space-y-3 mb-4 pb-4 border-b border-border">
+            <div className="flex gap-2">
+              <Select value={orderType} onValueChange={(v: "dine-in" | "takeaway" | "delivery") => setOrderType(v)}>
+                <SelectTrigger className="flex-1 h-9">
+                  <SelectValue placeholder="Order Type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="dine-in">Dine In</SelectItem>
+                  <SelectItem value="takeaway">Takeaway</SelectItem>
+                  <SelectItem value="delivery">Delivery</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="relative">
+              <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input 
+                placeholder="Customer name (optional)" 
+                value={customerName} 
+                onChange={(e) => setCustomerName(e.target.value)}
+                className="pl-10 h-9"
+              />
+            </div>
           </div>
-          <div className="relative">
-            <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input 
-              placeholder="Customer name (optional)" 
-              value={customerName} 
-              onChange={(e) => setCustomerName(e.target.value)}
-              className="pl-10 h-9"
-            />
+        )}
+
+        {/* Self-Service Customer Name */}
+        {posMode === "selfservice" && (
+          <div className="mb-4 pb-4 border-b border-border">
+            <div className="relative">
+              <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input 
+                placeholder="Enter your name" 
+                value={customerName} 
+                onChange={(e) => setCustomerName(e.target.value)}
+                className="pl-10 h-10 text-base"
+              />
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="flex-1 overflow-auto space-y-2 mb-4">
           {cart.length === 0 ? (
-            <div className="text-center text-muted-foreground py-6"><ShoppingCart className="w-10 h-10 mx-auto mb-3 opacity-50" /><p>No items in cart</p></div>
+            <div className="text-center text-muted-foreground py-8"><ShoppingCart className="w-12 h-12 mx-auto mb-3 opacity-50" /><p>{posMode === "selfservice" ? "Add items to start your order" : "No items in cart"}</p></div>
           ) : (
             cart.map((item) => (
-              <div key={item.id} className="flex items-center gap-2 bg-secondary/50 rounded-xl p-2">
+              <div key={item.id} className="flex items-center gap-2 bg-secondary/50 rounded-xl p-3">
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-foreground text-sm truncate">{item.name}</p>
                   {item.variationText && <p className="text-xs text-muted-foreground truncate">{item.variationText}</p>}
                   <p className="text-xs text-muted-foreground">₦{item.price.toLocaleString()}</p>
                 </div>
                 <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => updateQuantity(item.id, -1)}><Minus className="w-3 h-3" /></Button>
-                  <span className="w-5 text-center font-medium text-sm">{item.quantity}</span>
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => updateQuantity(item.id, 1)}><Plus className="w-3 h-3" /></Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => updateQuantity(item.id, -1)}><Minus className="w-4 h-4" /></Button>
+                  <span className="w-6 text-center font-semibold">{item.quantity}</span>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => updateQuantity(item.id, 1)}><Plus className="w-4 h-4" /></Button>
                 </div>
-                <p className="font-semibold text-foreground w-16 text-right text-sm">₦{(item.price * item.quantity).toLocaleString()}</p>
+                <p className="font-semibold text-foreground w-16 text-right">₦{(item.price * item.quantity).toLocaleString()}</p>
               </div>
             ))
           )}
@@ -480,29 +577,94 @@ const POSPage = () => {
           <div className="flex justify-between text-sm"><span className="text-muted-foreground">Subtotal</span><span className="text-foreground">₦{subtotal.toLocaleString()}</span></div>
           {discount > 0 && <div className="flex justify-between text-sm text-status-success"><span>Discount</span><span>-₦{discount.toLocaleString()}</span></div>}
           <div className="flex justify-between text-sm"><span className="text-muted-foreground">VAT (7.5%)</span><span className="text-foreground">₦{tax.toLocaleString()}</span></div>
-          <div className="flex justify-between font-bold pt-2 border-t border-border"><span className="text-foreground">Total</span><span className="text-primary">₦{total.toLocaleString()}</span></div>
+          <div className="flex justify-between font-bold pt-2 border-t border-border text-lg"><span className="text-foreground">Total</span><span className="text-primary">₦{total.toLocaleString()}</span></div>
         </div>
 
-        {/* Discount Button */}
-        <Button variant="outline" size="sm" className="mb-3" onClick={() => setShowDiscountModal(true)} disabled={cart.length === 0}>
-          <Percent className="w-4 h-4 mr-2" />{discount > 0 ? `Discount: ₦${discount.toLocaleString()}` : "Add Discount"}
-        </Button>
+        {/* Counter Mode Actions */}
+        {posMode === "counter" && (
+          <>
+            <Button variant="outline" size="sm" className="mb-3" onClick={() => setShowDiscountModal(true)} disabled={cart.length === 0}>
+              <Percent className="w-4 h-4 mr-2" />{discount > 0 ? `Discount: ₦${discount.toLocaleString()}` : "Add Discount"}
+            </Button>
 
-        {/* Bill Type Buttons */}
-        <div className="grid grid-cols-2 gap-2 mb-2">
-          <Button variant="outline" className="h-10" disabled={cart.length === 0} onClick={handleQuickBill}>
-            <Zap className="w-4 h-4 mr-1" />Quick Bill
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              <Button variant="outline" className="h-10" disabled={cart.length === 0} onClick={handleQuickBill}>
+                <Zap className="w-4 h-4 mr-1" />Quick Bill
+              </Button>
+              <Button variant="secondary" className="h-10" disabled={cart.length === 0} onClick={handleProcessBill}>
+                <ChefHat className="w-4 h-4 mr-1" />Process Bill
+              </Button>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <Button variant="outline" className="h-10" disabled={cart.length === 0} onClick={holdOrder}><Pause className="w-4 h-4" /></Button>
+              <Button variant="secondary" className="h-10" disabled={cart.length === 0}><Banknote className="w-4 h-4 mr-1" />Cash</Button>
+              <Button className="h-10 gradient-primary" disabled={cart.length === 0}><CreditCard className="w-4 h-4 mr-1" />Card</Button>
+            </div>
+          </>
+        )}
+
+        {/* Self-Service Mode Actions */}
+        {posMode === "selfservice" && (
+          <Button 
+            className="h-14 text-lg font-semibold gradient-primary" 
+            disabled={cart.length === 0}
+            onClick={handleSelfServicePay}
+          >
+            <Wallet className="w-5 h-5 mr-2" />
+            Pay ₦{total.toLocaleString()}
           </Button>
-          <Button variant="secondary" className="h-10" disabled={cart.length === 0} onClick={handleProcessBill}>
-            <ChefHat className="w-4 h-4 mr-1" />Process Bill
-          </Button>
-        </div>
-        <div className="grid grid-cols-3 gap-2">
-          <Button variant="outline" className="h-10" disabled={cart.length === 0} onClick={holdOrder}><Pause className="w-4 h-4" /></Button>
-          <Button variant="secondary" className="h-10" disabled={cart.length === 0}><Banknote className="w-4 h-4 mr-1" />Cash</Button>
-          <Button className="h-10 gradient-primary" disabled={cart.length === 0}><CreditCard className="w-4 h-4 mr-1" />Card</Button>
-        </div>
+        )}
       </div>
+
+      {/* Payment Modal for Self-Service */}
+      <Dialog open={showPaymentModal} onOpenChange={setShowPaymentModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-center">Complete Payment</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-6 py-4">
+            <div className="text-center">
+              <p className="text-3xl font-bold text-primary mb-2">₦{total.toLocaleString()}</p>
+              <p className="text-sm text-muted-foreground">Transfer to the account below</p>
+            </div>
+
+            <div className="bg-secondary/50 rounded-xl p-4 space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground text-sm">Bank</span>
+                <span className="font-medium text-foreground">{virtualAccount.bank}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground text-sm">Account Number</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono font-bold text-foreground text-lg">{virtualAccount.accountNumber}</span>
+                  <Button size="icon" variant="ghost" className="h-8 w-8" onClick={copyAccountNumber}>
+                    {copied ? <Check className="w-4 h-4 text-status-success" /> : <Copy className="w-4 h-4" />}
+                  </Button>
+                </div>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground text-sm">Account Name</span>
+                <span className="font-medium text-foreground">{virtualAccount.accountName}</span>
+              </div>
+            </div>
+
+            <div className="bg-status-warning/10 border border-status-warning/30 rounded-lg p-3 text-center">
+              <Clock className="w-5 h-5 text-status-warning mx-auto mb-1" />
+              <p className="text-sm text-foreground">Account expires in 10:00 minutes</p>
+            </div>
+
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => setShowPaymentModal(false)}>
+                <X className="w-4 h-4 mr-2" />Cancel
+              </Button>
+              <Button className="flex-1 gradient-primary" onClick={handlePaymentConfirmed}>
+                <Check className="w-4 h-4 mr-2" />I've Paid
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Modals */}
       <ItemVariationModal item={selectedItem} onClose={() => setSelectedItem(null)} onAddToCart={addToCart} />
@@ -514,5 +676,49 @@ const POSPage = () => {
     </div>
   );
 };
+
+// Menu Grid Component
+interface MenuGridProps {
+  searchQuery: string;
+  setSearchQuery: (query: string) => void;
+  selectedCategory: string;
+  setSelectedCategory: (category: string) => void;
+  filteredItems: MenuItem[];
+  handleItemClick: (item: MenuItem) => void;
+  isSelfService: boolean;
+}
+
+const MenuGrid = ({ searchQuery, setSearchQuery, selectedCategory, setSelectedCategory, filteredItems, handleItemClick, isSelfService }: MenuGridProps) => (
+  <>
+    <div className="relative mb-4">
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+      <Input placeholder="Search menu items..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className={`pl-10 ${isSelfService ? "h-12 text-base" : ""}`} />
+    </div>
+
+    <div className="flex gap-2 overflow-x-auto pb-2 mb-4 scrollbar-hide">
+      {categories.map((cat) => (
+        <button key={cat.id} onClick={() => setSelectedCategory(cat.id)} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl whitespace-nowrap transition-all ${selectedCategory === cat.id ? "bg-primary text-primary-foreground" : "bg-card border border-border hover:border-primary/50"} ${isSelfService ? "text-base" : "text-sm"}`}>
+          <span className={isSelfService ? "text-xl" : ""}>{cat.icon}</span>
+          <span className="font-medium">{cat.name}</span>
+        </button>
+      ))}
+    </div>
+
+    <div className={`grid gap-3 ${isSelfService ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4"}`}>
+      {filteredItems.map((item) => (
+        <button key={item.id} onClick={() => handleItemClick(item)} className={`bg-card border border-border rounded-xl text-left hover:border-primary/50 hover:shadow-lg transition-all group ${isSelfService ? "p-4" : "p-3"}`}>
+          <div className={`flex items-center justify-center rounded-xl bg-secondary mb-3 ${isSelfService ? "w-full h-24 text-4xl" : "w-12 h-12 text-2xl"}`}>
+            {item.image || "🍽️"}
+          </div>
+          <h3 className={`font-semibold text-foreground group-hover:text-primary line-clamp-2 ${isSelfService ? "text-base mb-2" : "text-xs mb-1"}`}>{item.name}</h3>
+          <div className="flex items-center gap-2">
+            <p className={`text-primary font-bold ${isSelfService ? "text-lg" : "text-sm"}`}>₦{item.price.toLocaleString()}</p>
+            {item.variations && <Badge variant="outline" className="text-xs">+Options</Badge>}
+          </div>
+        </button>
+      ))}
+    </div>
+  </>
+);
 
 export default POSPage;

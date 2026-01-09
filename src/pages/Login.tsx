@@ -3,17 +3,18 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { ChefHat } from "lucide-react";
 import PinPad from "@/components/PinPad";
-import StaffSelector from "@/components/StaffSelector";
 import ThemeToggle from "@/components/ThemeToggle";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 // Mock staff data
 const mockStaff = [
-  { id: "1", name: "John D.", role: "Manager" },
-  { id: "2", name: "Sarah M.", role: "Server" },
-  { id: "3", name: "Mike R.", role: "Chef" },
-  { id: "4", name: "Emma L.", role: "Cashier" },
-  { id: "5", name: "David K.", role: "Delivery" },
-  { id: "6", name: "Lisa P.", role: "Server" },
+  { id: "STF001", name: "John D.", role: "Manager" },
+  { id: "STF002", name: "Sarah M.", role: "Server" },
+  { id: "STF003", name: "Mike R.", role: "Chef" },
+  { id: "STF004", name: "Emma L.", role: "Cashier" },
+  { id: "STF005", name: "David K.", role: "Delivery" },
+  { id: "STF006", name: "Lisa P.", role: "Server" },
 ];
 
 // Mock PIN for demo (in real app, this would be validated server-side)
@@ -21,9 +22,10 @@ const DEMO_PIN = "1234";
 
 const Login = () => {
   const navigate = useNavigate();
-  const [selectedStaff, setSelectedStaff] = useState<typeof mockStaff[0] | null>(null);
+  const [staffId, setStaffId] = useState("");
   const [pin, setPin] = useState("");
-  const [step, setStep] = useState<"select" | "pin">("select");
+  const [step, setStep] = useState<"staffid" | "pin">("staffid");
+  const [foundStaff, setFoundStaff] = useState<typeof mockStaff[0] | null>(null);
 
   useEffect(() => {
     // Initialize theme on load
@@ -35,17 +37,22 @@ const Login = () => {
     }
   }, []);
 
-  const handleStaffSelect = (staff: typeof mockStaff[0]) => {
-    setSelectedStaff(staff);
-    setStep("pin");
-    setPin("");
+  const handleStaffIdSubmit = () => {
+    const staff = mockStaff.find((s) => s.id.toLowerCase() === staffId.toLowerCase());
+    if (staff) {
+      setFoundStaff(staff);
+      setStep("pin");
+      setPin("");
+    } else {
+      toast.error("Staff ID not found. Try STF001-STF006 for demo.");
+    }
   };
 
   const handlePinSubmit = () => {
     if (pin === DEMO_PIN) {
-      toast.success(`Welcome, ${selectedStaff?.name}!`);
+      toast.success(`Welcome, ${foundStaff?.name}!`);
       // Store staff info in sessionStorage for demo
-      sessionStorage.setItem("currentStaff", JSON.stringify(selectedStaff));
+      sessionStorage.setItem("currentStaff", JSON.stringify(foundStaff));
       navigate("/dashboard");
     } else {
       toast.error("Invalid PIN. Try 1234 for demo.");
@@ -54,9 +61,10 @@ const Login = () => {
   };
 
   const handleBack = () => {
-    setStep("select");
+    setStep("staffid");
     setPin("");
-    setSelectedStaff(null);
+    setFoundStaff(null);
+    setStaffId("");
   };
 
   return (
@@ -82,16 +90,31 @@ const Login = () => {
 
         {/* Card */}
         <div className="bg-card border border-border rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 shadow-xl animate-slide-up">
-          {step === "select" ? (
+          {step === "staffid" ? (
             <>
               <h2 className="text-lg sm:text-xl font-semibold text-foreground text-center mb-4 sm:mb-6">
-                Select Staff Member
+                Enter Staff ID
               </h2>
-              <StaffSelector
-                staff={mockStaff}
-                selectedStaff={selectedStaff}
-                onSelect={handleStaffSelect}
-              />
+              <div className="space-y-4">
+                <Input
+                  placeholder="e.g. STF001"
+                  value={staffId}
+                  onChange={(e) => setStaffId(e.target.value.toUpperCase())}
+                  className="text-center text-lg font-mono tracking-wider h-12"
+                  onKeyDown={(e) => e.key === "Enter" && handleStaffIdSubmit()}
+                  autoFocus
+                />
+                <Button 
+                  className="w-full h-12 gradient-primary text-lg font-semibold"
+                  onClick={handleStaffIdSubmit}
+                  disabled={!staffId.trim()}
+                >
+                  Continue
+                </Button>
+              </div>
+              <p className="text-center text-xs text-muted-foreground mt-4 sm:mt-6">
+                Demo Staff IDs: STF001 - STF006
+              </p>
             </>
           ) : (
             <>
@@ -99,7 +122,7 @@ const Login = () => {
                 onClick={handleBack}
                 className="text-sm text-muted-foreground hover:text-foreground mb-4 transition-colors"
               >
-                ← Back to staff selection
+                ← Back to Staff ID
               </button>
               
               <div className="text-center mb-4 sm:mb-6">
@@ -107,7 +130,7 @@ const Login = () => {
                   Enter PIN
                 </h2>
                 <p className="text-muted-foreground text-sm mt-1">
-                  Signing in as <span className="text-primary font-medium">{selectedStaff?.name}</span>
+                  Signing in as <span className="text-primary font-medium">{foundStaff?.name}</span>
                 </p>
               </div>
               

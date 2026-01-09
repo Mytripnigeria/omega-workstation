@@ -60,10 +60,24 @@ interface StoreLocation {
   type: "instore" | "outstore";
 }
 
+interface Supplier {
+  id: string;
+  name: string;
+}
+
+const suppliers: Supplier[] = [
+  { id: "sup1", name: "Fresh Foods Ltd" },
+  { id: "sup2", name: "Metro Wholesale" },
+  { id: "sup3", name: "Agro Direct" },
+  { id: "sup4", name: "Protein Masters" },
+  { id: "sup5", name: "Beverage Hub" },
+];
+
 interface NewItem {
   name: string;
   category: string;
   quantity: string;
+  supplier: string;
   unit: string;
   minStock: string;
   location: string;
@@ -93,7 +107,7 @@ const mockPendingReturns: PendingReturn[] = [
   { id: "r2", items: [{ name: "Marinated Chicken", quantity: 3, unit: "kg" }], fromLocation: "kc", toLocation: "freezer", reason: "Not used today", requestedAt: new Date(Date.now() - 60 * 60000), requestedBy: "Sarah O." },
 ];
 
-const emptyNewItem: NewItem = { name: "", category: "", quantity: "", unit: "", minStock: "", location: "" };
+const emptyNewItem: NewItem = { name: "", category: "", quantity: "", unit: "", minStock: "", location: "", supplier: "" };
 
 const InstorePage = () => {
   const [items, setItems] = useState<InventoryItem[]>(mockItems);
@@ -483,6 +497,18 @@ const InstorePage = () => {
                     {instoreLocations.map((loc) => (
                       <SelectItem key={loc.id} value={loc.id}>
                         {loc.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={item.supplier} onValueChange={(v) => updateNewItem(index, "supplier", v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select supplier" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {suppliers.map((sup) => (
+                      <SelectItem key={sup.id} value={sup.id}>
+                        {sup.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
