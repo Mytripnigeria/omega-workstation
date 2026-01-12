@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ChefHat } from "lucide-react";
+import { ChefHat, ArrowLeft } from "lucide-react";
 import PinPad from "@/components/PinPad";
 import ThemeToggle from "@/components/ThemeToggle";
 import { Input } from "@/components/ui/input";
@@ -17,7 +17,7 @@ const mockStaff = [
   { id: "STF006", name: "Lisa P.", role: "Server" },
 ];
 
-// Mock PIN for demo (in real app, this would be validated server-side)
+// Mock PIN for demo
 const DEMO_PIN = "1234";
 
 const Login = () => {
@@ -28,7 +28,6 @@ const Login = () => {
   const [foundStaff, setFoundStaff] = useState<typeof mockStaff[0] | null>(null);
 
   useEffect(() => {
-    // Initialize theme on load
     const savedTheme = localStorage.getItem("theme");
     if (savedTheme === "dark") {
       document.documentElement.classList.add("dark");
@@ -51,7 +50,6 @@ const Login = () => {
   const handlePinSubmit = () => {
     if (pin === DEMO_PIN) {
       toast.success(`Welcome, ${foundStaff?.name}!`);
-      // Store staff info in sessionStorage for demo
       sessionStorage.setItem("currentStaff", JSON.stringify(foundStaff));
       navigate("/dashboard");
     } else {
@@ -68,31 +66,28 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden">
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 sm:p-6">
       {/* Theme Toggle */}
-      <div className="absolute top-4 right-4">
+      <div className="fixed top-4 right-4">
         <ThemeToggle />
       </div>
 
-      {/* Background glow effect */}
-      <div className="absolute inset-0 gradient-glow opacity-50" />
-      
       {/* Content */}
-      <div className="relative z-10 w-full max-w-md">
+      <div className="w-full max-w-sm">
         {/* Logo */}
-        <div className="flex flex-col items-center mb-8 sm:mb-10 animate-fade-in">
-          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl gradient-primary flex items-center justify-center mb-4 glow-effect">
-            <ChefHat className="w-8 h-8 sm:w-10 sm:h-10 text-primary-foreground" />
+        <div className="flex flex-col items-center mb-10 animate-fade-in">
+          <div className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center mb-4">
+            <ChefHat className="w-8 h-8 text-primary-foreground" />
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Workstation</h1>
-          <p className="text-muted-foreground mt-1 text-sm sm:text-base">Restaurant Management</p>
+          <h1 className="text-2xl font-bold text-foreground tracking-tight">Mr. Jollof</h1>
+          <p className="text-muted-foreground mt-1 text-sm">Staff Workstation</p>
         </div>
 
         {/* Card */}
-        <div className="bg-card border border-border rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 shadow-xl animate-slide-up">
+        <div className="bg-card rounded-2xl p-6 sm:p-8 shadow-clean border border-border">
           {step === "staffid" ? (
             <>
-              <h2 className="text-lg sm:text-xl font-semibold text-foreground text-center mb-4 sm:mb-6">
+              <h2 className="text-lg font-semibold text-foreground text-center mb-6">
                 Enter Staff ID
               </h2>
               <div className="space-y-4">
@@ -100,37 +95,38 @@ const Login = () => {
                   placeholder="e.g. STF001"
                   value={staffId}
                   onChange={(e) => setStaffId(e.target.value.toUpperCase())}
-                  className="text-center text-lg font-mono tracking-wider h-12"
+                  className="text-center text-lg font-mono tracking-wider h-14 rounded-xl"
                   onKeyDown={(e) => e.key === "Enter" && handleStaffIdSubmit()}
                   autoFocus
                 />
                 <Button 
-                  className="w-full h-12 gradient-primary text-lg font-semibold"
+                  className="w-full h-12 rounded-xl text-base font-semibold"
                   onClick={handleStaffIdSubmit}
                   disabled={!staffId.trim()}
                 >
                   Continue
                 </Button>
               </div>
-              <p className="text-center text-xs text-muted-foreground mt-4 sm:mt-6">
-                Demo Staff IDs: STF001 - STF006
+              <p className="text-center text-xs text-muted-foreground mt-6">
+                Demo IDs: STF001 - STF006
               </p>
             </>
           ) : (
             <>
               <button
                 onClick={handleBack}
-                className="text-sm text-muted-foreground hover:text-foreground mb-4 transition-colors"
+                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
               >
-                ← Back to Staff ID
+                <ArrowLeft className="w-4 h-4" />
+                Back
               </button>
               
-              <div className="text-center mb-4 sm:mb-6">
-                <h2 className="text-lg sm:text-xl font-semibold text-foreground">
+              <div className="text-center mb-6">
+                <h2 className="text-lg font-semibold text-foreground">
                   Enter PIN
                 </h2>
                 <p className="text-muted-foreground text-sm mt-1">
-                  Signing in as <span className="text-primary font-medium">{foundStaff?.name}</span>
+                  Signing in as <span className="text-foreground font-medium">{foundStaff?.name}</span>
                 </p>
               </div>
               
@@ -140,12 +136,17 @@ const Login = () => {
                 onSubmit={handlePinSubmit}
               />
               
-              <p className="text-center text-xs text-muted-foreground mt-4 sm:mt-6">
+              <p className="text-center text-xs text-muted-foreground mt-6">
                 Demo PIN: 1234
               </p>
             </>
           )}
         </div>
+
+        {/* Footer */}
+        <p className="text-center text-xs text-muted-foreground mt-8">
+          © 2026 Mr. Jollof Foods Ltd
+        </p>
       </div>
     </div>
   );

@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { Bike, MapPin, Clock, Package, TrendingUp, Timer, CheckCircle2, AlertTriangle } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Bike, MapPin, Clock, Package, Timer, CheckCircle2, AlertTriangle, ArrowLeft, Phone, Navigation } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import PageHeader from "@/components/PageHeader";
 import DeliveryModal from "@/components/DeliveryModal";
 import ConfirmDialog from "@/components/ConfirmDialog";
 
@@ -34,6 +35,7 @@ const completedToday: DeliveryOrder[] = [
 ];
 
 const DeliveryPage = () => {
+  const navigate = useNavigate();
   const [deliveries, setDeliveries] = useState<DeliveryOrder[]>(mockDeliveries);
   const [completed] = useState<DeliveryOrder[]>(completedToday);
   const [selectedDelivery, setSelectedDelivery] = useState<DeliveryOrder | null>(null);
@@ -41,7 +43,6 @@ const DeliveryPage = () => {
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; description: string; action: () => void }>({ open: false, title: "", description: "", action: () => {} });
   const [, setTick] = useState(0);
 
-  // Tick every second to update countdowns
   useEffect(() => {
     const interval = setInterval(() => setTick((t) => t + 1), 1000);
     return () => clearInterval(interval);
@@ -93,114 +94,162 @@ const DeliveryPage = () => {
   const newOrders = deliveries.filter((d) => d.status === "pending");
   const deliveringOrders = deliveries.filter((d) => ["picked_up", "on_the_way"].includes(d.status));
 
-  // Performance metrics
   const totalDeliveries = completed.length + deliveringOrders.length;
-  const avgDeliveryTime = 18; // minutes
-  const onTimeRate = 92; // percent
+  const avgDeliveryTime = 18;
+  const onTimeRate = 92;
 
   const DeliveryCard = ({ delivery }: { delivery: DeliveryOrder }) => {
     const remaining = getRemainingSeconds(delivery);
     const isDelayed = remaining < 0;
 
     return (
-      <button key={delivery.id} onClick={() => setSelectedDelivery(delivery)} className="w-full bg-card border border-border rounded-2xl p-4 text-left transition-all duration-200 hover:border-primary/50 hover:shadow-md">
+      <div 
+        onClick={() => setSelectedDelivery(delivery)} 
+        className="bg-card border border-border rounded-2xl p-5 cursor-pointer transition-all hover:border-primary/30 hover:shadow-md"
+      >
         <div className="flex items-start justify-between mb-3">
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="font-semibold text-foreground">{delivery.id}</span>
-              <Badge className={getStatusColor(delivery.status)}>{getStatusLabel(delivery.status)}</Badge>
+              <Badge className={`${getStatusColor(delivery.status)} rounded-lg`}>{getStatusLabel(delivery.status)}</Badge>
             </div>
             <p className="text-base font-medium text-foreground">{delivery.customerName}</p>
           </div>
           <div className="text-right">
-            <p className="text-lg font-bold text-primary">₦{delivery.total.toLocaleString()}</p>
-            <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1"><MapPin className="w-3 h-3" />{delivery.distance}</div>
+            <p className="text-lg font-bold text-foreground">₦{delivery.total.toLocaleString()}</p>
+            <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+              <MapPin className="w-3 h-3" />
+              {delivery.distance}
+            </div>
           </div>
         </div>
 
-        {/* Countdown Timer */}
         {delivery.status !== "delivered" && (
-          <div className={`flex items-center gap-2 mb-3 p-2 rounded-lg ${isDelayed ? "bg-destructive/10" : "bg-secondary/50"}`}>
+          <div className={`flex items-center gap-2 mb-3 p-3 rounded-xl ${isDelayed ? "bg-destructive/10" : "bg-muted"}`}>
             {isDelayed ? <AlertTriangle className="w-4 h-4 text-destructive" /> : <Timer className="w-4 h-4 text-muted-foreground" />}
-            <span className={`font-mono font-semibold ${isDelayed ? "text-destructive" : "text-foreground"}`}>{formatCountdown(remaining)}</span>
-            {isDelayed && <Badge className="bg-destructive text-destructive-foreground text-xs">DELAYED</Badge>}
+            <span className={`font-mono font-bold ${isDelayed ? "text-destructive" : "text-foreground"}`}>{formatCountdown(remaining)}</span>
+            {isDelayed && <Badge className="bg-destructive text-destructive-foreground text-xs rounded-lg">DELAYED</Badge>}
           </div>
         )}
 
-        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2"><MapPin className="w-4 h-4 flex-shrink-0" /><span className="truncate">{delivery.address}</span></div>
-        <div className="flex items-center gap-4 text-xs"><div className="flex items-center gap-1 text-muted-foreground"><Package className="w-4 h-4" />{delivery.items.length} items</div></div>
-      </button>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+          <MapPin className="w-4 h-4 flex-shrink-0" />
+          <span className="truncate">{delivery.address}</span>
+        </div>
+        
+        <div className="flex items-center gap-4 text-sm">
+          <div className="flex items-center gap-1 text-muted-foreground">
+            <Package className="w-4 h-4" />
+            {delivery.items.length} items
+          </div>
+          {delivery.notes && (
+            <span className="text-status-warning text-xs">Has notes</span>
+          )}
+        </div>
+      </div>
     );
   };
 
   return (
-    <div className="min-h-screen bg-background p-3 sm:p-4 lg:p-6">
-      <PageHeader title="Delivery Rider" icon={Bike} iconColor="text-category-peach" badge={`${deliveries.filter((d) => d.status !== "delivered").length} Active`} />
-
-      {/* Performance Metrics */}
-      <div className="grid grid-cols-3 gap-3 mb-6">
-        <div className="bg-card border border-border rounded-xl p-3 text-center">
-          <p className="text-2xl font-bold text-category-mint">{totalDeliveries}</p>
-          <p className="text-xs text-muted-foreground">Today's Deliveries</p>
-        </div>
-        <div className="bg-card border border-border rounded-xl p-3 text-center">
-          <p className="text-2xl font-bold text-category-lavender">{avgDeliveryTime}m</p>
-          <p className="text-xs text-muted-foreground">Avg. Time</p>
-        </div>
-        <div className="bg-card border border-border rounded-xl p-3 text-center">
-          <p className="text-2xl font-bold text-category-peach">{onTimeRate}%</p>
-          <p className="text-xs text-muted-foreground">On-Time Rate</p>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="w-full mb-4">
-          <TabsTrigger value="new" className="flex-1">New<Badge variant="secondary" className="ml-2">{newOrders.length}</Badge></TabsTrigger>
-          <TabsTrigger value="delivering" className="flex-1">Delivering<Badge variant="secondary" className="ml-2">{deliveringOrders.length}</Badge></TabsTrigger>
-          <TabsTrigger value="completed" className="flex-1">Completed<Badge variant="secondary" className="ml-2">{completed.length}</Badge></TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="new">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {newOrders.length === 0 ? (
-              <div className="col-span-full bg-card border border-border rounded-2xl p-12 text-center">
-                <Package className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-50" />
-                <h3 className="text-lg font-semibold text-foreground mb-2">No New Deliveries</h3>
-                <p className="text-muted-foreground">New delivery orders will appear here</p>
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="bg-card border-b border-border px-4 sm:px-6 py-4 sticky top-0 z-40">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-muted rounded-xl transition-colors">
+              <ArrowLeft className="w-5 h-5 text-foreground" />
+            </button>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-category-peach flex items-center justify-center">
+                <Bike className="w-5 h-5 text-category-peach" />
               </div>
-            ) : newOrders.map((delivery) => <DeliveryCard key={delivery.id} delivery={delivery} />)}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="delivering">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {deliveringOrders.length === 0 ? (
-              <div className="col-span-full bg-card border border-border rounded-2xl p-12 text-center">
-                <Bike className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-50" />
-                <h3 className="text-lg font-semibold text-foreground mb-2">No Active Deliveries</h3>
-                <p className="text-muted-foreground">Pick up orders to start delivering</p>
+              <div>
+                <h1 className="text-lg font-bold text-foreground">Delivery Rider</h1>
+                <p className="text-xs text-muted-foreground">{deliveries.filter((d) => d.status !== "delivered").length} Active Deliveries</p>
               </div>
-            ) : deliveringOrders.map((delivery) => <DeliveryCard key={delivery.id} delivery={delivery} />)}
+            </div>
           </div>
-        </TabsContent>
+        </div>
+      </header>
 
-        <TabsContent value="completed">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {completed.map((delivery) => (
-              <div key={delivery.id} className="bg-card/50 border border-border rounded-2xl p-4 opacity-70">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-semibold text-foreground">{delivery.id}</span>
-                  <Badge className="bg-status-success text-white"><CheckCircle2 className="w-3 h-3 mr-1" />Delivered</Badge>
+      <main className="p-4 sm:p-6 max-w-7xl mx-auto">
+        {/* Stats */}
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          <div className="bg-card border border-border rounded-2xl p-5 text-center">
+            <p className="text-3xl font-bold text-foreground">{totalDeliveries}</p>
+            <p className="text-sm text-muted-foreground mt-1">Today's Deliveries</p>
+          </div>
+          <div className="bg-card border border-border rounded-2xl p-5 text-center">
+            <p className="text-3xl font-bold text-foreground">{avgDeliveryTime}m</p>
+            <p className="text-sm text-muted-foreground mt-1">Avg. Time</p>
+          </div>
+          <div className="bg-card border border-border rounded-2xl p-5 text-center">
+            <p className="text-3xl font-bold text-status-success">{onTimeRate}%</p>
+            <p className="text-sm text-muted-foreground mt-1">On-Time Rate</p>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="bg-muted h-11 w-full mb-4">
+            <TabsTrigger value="new" className="flex-1 gap-2 rounded-lg">
+              New
+              <Badge variant="secondary" className="h-5 px-1.5">{newOrders.length}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="delivering" className="flex-1 gap-2 rounded-lg">
+              Delivering
+              <Badge variant="secondary" className="h-5 px-1.5">{deliveringOrders.length}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="completed" className="flex-1 gap-2 rounded-lg">
+              Completed
+              <Badge variant="secondary" className="h-5 px-1.5">{completed.length}</Badge>
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="new">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {newOrders.length === 0 ? (
+                <div className="col-span-full bg-card border border-border rounded-2xl p-16 text-center">
+                  <Package className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-30" />
+                  <h3 className="text-lg font-semibold text-foreground mb-2">No New Deliveries</h3>
+                  <p className="text-muted-foreground">New delivery orders will appear here</p>
                 </div>
-                <p className="text-sm text-foreground">{delivery.customerName}</p>
-                <p className="text-xs text-muted-foreground">{delivery.address}</p>
-                <p className="text-sm font-semibold text-primary mt-2">₦{delivery.total.toLocaleString()}</p>
-              </div>
-            ))}
-          </div>
-        </TabsContent>
-      </Tabs>
+              ) : newOrders.map((delivery) => <DeliveryCard key={delivery.id} delivery={delivery} />)}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="delivering">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {deliveringOrders.length === 0 ? (
+                <div className="col-span-full bg-card border border-border rounded-2xl p-16 text-center">
+                  <Bike className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-30" />
+                  <h3 className="text-lg font-semibold text-foreground mb-2">No Active Deliveries</h3>
+                  <p className="text-muted-foreground">Pick up orders to start delivering</p>
+                </div>
+              ) : deliveringOrders.map((delivery) => <DeliveryCard key={delivery.id} delivery={delivery} />)}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="completed">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {completed.map((delivery) => (
+                <div key={delivery.id} className="bg-card border border-border rounded-2xl p-5 opacity-70">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-semibold text-foreground">{delivery.id}</span>
+                    <Badge className="bg-status-success text-white rounded-lg">
+                      <CheckCircle2 className="w-3 h-3 mr-1" />
+                      Delivered
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-foreground font-medium">{delivery.customerName}</p>
+                  <p className="text-xs text-muted-foreground">{delivery.address}</p>
+                  <p className="text-sm font-bold text-foreground mt-2">₦{delivery.total.toLocaleString()}</p>
+                </div>
+              ))}
+            </div>
+          </TabsContent>
+        </Tabs>
+      </main>
 
       <DeliveryModal delivery={selectedDelivery} onClose={() => setSelectedDelivery(null)} onUpdateStatus={updateStatus} />
       <ConfirmDialog open={confirmDialog.open} onOpenChange={(open) => setConfirmDialog({ ...confirmDialog, open })} title={confirmDialog.title} description={confirmDialog.description} onConfirm={() => { confirmDialog.action(); setConfirmDialog({ ...confirmDialog, open: false }); }} />
