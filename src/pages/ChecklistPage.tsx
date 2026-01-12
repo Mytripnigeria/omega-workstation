@@ -3,6 +3,8 @@ import { ClipboardCheck, CheckCircle2, Clock, ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useNavigate } from "react-router-dom";
+import ActivityLogButton from "@/components/ActivityLogButton";
+import ActivityLog from "@/components/ActivityLog";
 
 interface ChecklistItem {
   id: string;
@@ -57,6 +59,7 @@ const ChecklistPage = () => {
   const navigate = useNavigate();
   const [checklist, setChecklist] = useState<ChecklistCategory[]>(mockChecklist);
   const [currentShift] = useState("Morning Shift - Kitchen Staff");
+  const [showActivityLog, setShowActivityLog] = useState(false);
 
   const toggleItem = (categoryId: string, itemId: string) => {
     setChecklist((prev) =>
@@ -111,6 +114,7 @@ const ChecklistPage = () => {
                 </div>
               </div>
             </div>
+            <ActivityLogButton onClick={() => setShowActivityLog(true)} />
           </div>
         </div>
       </header>
@@ -184,6 +188,8 @@ const ChecklistPage = () => {
           })}
         </div>
       </main>
+
+      <ActivityLog open={showActivityLog} onClose={() => setShowActivityLog(false)} pageName="Shift Checklist" />
     </div>
   );
 };

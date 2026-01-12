@@ -7,6 +7,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import ToastNotification from "@/components/ToastNotification";
 import CountdownTimer from "@/components/CountdownTimer";
+import ActivityLogButton from "@/components/ActivityLogButton";
+import ActivityLog from "@/components/ActivityLog";
 
 interface WaiterOrder {
   id: string;
@@ -37,6 +39,7 @@ const WaiterPage = () => {
   const [activeTab, setActiveTab] = useState("ready");
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; description: string; action: () => void }>({ open: false, title: "", description: "", action: () => {} });
   const [toast, setToast] = useState<{ open: boolean; type: "success" | "error" | "warning" | "info"; title: string; message?: string }>({ open: false, type: "success", title: "" });
+  const [showActivityLog, setShowActivityLog] = useState(false);
 
   const readyOrders = orders.filter((o) => o.status === "ready");
   const delayedOrders = orders.filter((o) => o.status === "delayed");
@@ -141,19 +144,22 @@ const WaiterPage = () => {
       <div className="flex-1 flex flex-col min-h-0">
         {/* Header */}
         <header className="bg-card border-b border-border px-4 sm:px-6 py-4 sticky top-0 z-40">
-          <div className="flex items-center gap-4">
-            <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-muted rounded-xl transition-colors">
-              <ArrowLeft className="w-5 h-5 text-foreground" />
-            </button>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-category-pink flex items-center justify-center">
-                <Users className="w-5 h-5 text-category-pink" />
-              </div>
-              <div>
-                <h1 className="text-lg font-bold text-foreground">Waiter Display</h1>
-                <p className="text-xs text-muted-foreground">{readyOrders.length} Ready to Serve</p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-muted rounded-xl transition-colors">
+                <ArrowLeft className="w-5 h-5 text-foreground" />
+              </button>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-category-pink flex items-center justify-center">
+                  <Users className="w-5 h-5 text-category-pink" />
+                </div>
+                <div>
+                  <h1 className="text-lg font-bold text-foreground">Waiter Display</h1>
+                  <p className="text-xs text-muted-foreground">{readyOrders.length} Ready to Serve</p>
+                </div>
               </div>
             </div>
+            <ActivityLogButton onClick={() => setShowActivityLog(true)} />
           </div>
         </header>
 
@@ -308,6 +314,7 @@ const WaiterPage = () => {
 
       <ConfirmDialog open={confirmDialog.open} onOpenChange={(open) => setConfirmDialog({ ...confirmDialog, open })} title={confirmDialog.title} description={confirmDialog.description} onConfirm={() => { confirmDialog.action(); setConfirmDialog({ ...confirmDialog, open: false }); }} />
       <ToastNotification open={toast.open} onClose={() => setToast({ ...toast, open: false })} type={toast.type} title={toast.title} message={toast.message} />
+      <ActivityLog open={showActivityLog} onClose={() => setShowActivityLog(false)} pageName="Waiter Display" />
     </div>
   );
 };

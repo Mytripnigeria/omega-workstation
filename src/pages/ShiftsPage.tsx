@@ -18,6 +18,8 @@ import {
 import ConfirmDialog from "@/components/ConfirmDialog";
 import ToastNotification from "@/components/ToastNotification";
 import { useNavigate } from "react-router-dom";
+import ActivityLogButton from "@/components/ActivityLogButton";
+import ActivityLog from "@/components/ActivityLog";
 
 interface Shift {
   id: string;
@@ -77,6 +79,7 @@ const ShiftsPage = () => {
     open: false, title: "", description: "", action: () => {},
   });
   const [toast, setToast] = useState<{ open: boolean; type: "success" | "error" | "warning" | "info"; title: string; message?: string }>({ open: false, type: "success", title: "" });
+  const [showActivityLog, setShowActivityLog] = useState(false);
 
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear();
@@ -152,19 +155,22 @@ const ShiftsPage = () => {
       {/* Header */}
       <header className="bg-card border-b border-border sticky top-0 z-50">
         <div className="px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center gap-4">
-            <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-muted rounded-xl transition-colors">
-              <ArrowLeft className="w-5 h-5 text-foreground" />
-            </button>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
-                <CalendarIcon className="w-5 h-5 text-foreground" />
-              </div>
-              <div>
-                <h1 className="text-lg font-bold text-foreground">My Shifts</h1>
-                <p className="text-xs text-muted-foreground">View your schedule</p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-muted rounded-xl transition-colors">
+                <ArrowLeft className="w-5 h-5 text-foreground" />
+              </button>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
+                  <CalendarIcon className="w-5 h-5 text-foreground" />
+                </div>
+                <div>
+                  <h1 className="text-lg font-bold text-foreground">My Shifts</h1>
+                  <p className="text-xs text-muted-foreground">View your schedule</p>
+                </div>
               </div>
             </div>
+            <ActivityLogButton onClick={() => setShowActivityLog(true)} />
           </div>
         </div>
       </header>
@@ -368,6 +374,7 @@ const ShiftsPage = () => {
         title={toast.title} 
         message={toast.message} 
       />
+      <ActivityLog open={showActivityLog} onClose={() => setShowActivityLog(false)} pageName="My Shifts" />
     </div>
   );
 };

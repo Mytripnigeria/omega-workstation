@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import CustomerInstructionsModal from "@/components/CustomerInstructionsModal";
+import ActivityLogButton from "@/components/ActivityLogButton";
+import ActivityLog from "@/components/ActivityLog";
 
 interface OrderItem {
   id: string;
@@ -43,6 +45,7 @@ const KitchenPage = () => {
   const [draggedItem, setDraggedItem] = useState<{ orderId: string; itemId: string } | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; description: string; action: () => void }>({ open: false, title: "", description: "", action: () => {} });
   const [instructionsModal, setInstructionsModal] = useState<{ open: boolean; orderId: string; instructions: string }>({ open: false, orderId: "", instructions: "" });
+  const [showActivityLog, setShowActivityLog] = useState(false);
   const [, setTick] = useState(0);
 
   useEffect(() => {
@@ -260,6 +263,7 @@ const KitchenPage = () => {
               </div>
             </div>
           </div>
+          <ActivityLogButton onClick={() => setShowActivityLog(true)} />
         </div>
       </header>
 
@@ -344,6 +348,7 @@ const KitchenPage = () => {
 
       <ConfirmDialog open={confirmDialog.open} onOpenChange={(open) => setConfirmDialog({ ...confirmDialog, open })} title={confirmDialog.title} description={confirmDialog.description} onConfirm={() => { confirmDialog.action(); setConfirmDialog({ ...confirmDialog, open: false }); }} />
       <CustomerInstructionsModal open={instructionsModal.open} onClose={() => setInstructionsModal({ ...instructionsModal, open: false })} orderId={instructionsModal.orderId} instructions={instructionsModal.instructions} />
+      <ActivityLog open={showActivityLog} onClose={() => setShowActivityLog(false)} pageName="Kitchen Display" />
     </div>
   );
 };
