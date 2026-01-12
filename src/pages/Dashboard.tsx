@@ -248,20 +248,23 @@ const Dashboard = () => {
         {/* Services */}
         <section>
           <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-4">Services</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {services.map((service) => (
               <button
                 key={service.title}
                 onClick={() => navigate(service.route)}
-                className="bg-card rounded-2xl border border-border p-5 text-left hover:border-primary/30 hover:shadow-lg transition-all duration-200 group"
+                className="bg-card rounded-2xl border border-border p-6 text-left hover:border-primary/30 hover:shadow-xl transition-all duration-200 group flex items-center gap-4"
               >
-                <div className={`w-11 h-11 rounded-xl flex items-center justify-center mb-4 bg-muted ${service.color}`}>
-                  <service.icon className="w-5 h-5" />
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-secondary flex-shrink-0">
+                  <service.icon className="w-6 h-6 text-foreground" />
                 </div>
-                <h4 className="font-semibold text-foreground group-hover:text-primary transition-colors text-sm">
-                  {service.title}
-                </h4>
-                <p className="text-xs text-muted-foreground mt-0.5">{service.description}</p>
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-semibold text-foreground group-hover:text-primary transition-colors">
+                    {service.title}
+                  </h4>
+                  <p className="text-sm text-muted-foreground">{service.description}</p>
+                </div>
+                <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary flex-shrink-0" />
               </button>
             ))}
           </div>

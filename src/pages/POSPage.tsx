@@ -478,42 +478,35 @@ const POSPage = () => {
               </h2>
 
               {/* Menu Grid */}
-              <div className={`grid gap-4 ${
+              <div className={`grid gap-3 ${
                 posMode === "selfservice" 
-                  ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" 
-                  : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4"
+                  ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" 
+                  : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
               }`}>
                 {filteredItems.map((item) => (
                   <button
                     key={item.id}
                     onClick={() => handleItemClick(item)}
-                    className="bg-card rounded-2xl border border-border p-4 text-left hover:border-primary/30 hover:shadow-lg transition-all group"
+                    className="bg-card rounded-2xl border border-border p-4 text-center hover:border-primary/30 hover:shadow-lg transition-all group flex flex-col items-center"
                   >
-                    <div className="flex gap-4">
-                      <div className={`flex-shrink-0 flex items-center justify-center rounded-xl bg-muted ${
-                        posMode === "selfservice" ? "w-20 h-20 text-4xl" : "w-16 h-16 text-3xl"
-                      }`}>
-                        {item.image || "🍽️"}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className={`font-semibold text-foreground group-hover:text-primary transition-colors ${
-                          posMode === "selfservice" ? "text-base" : "text-sm"
-                        }`}>
-                          {item.name}
-                        </h3>
-                        <p className={`text-primary font-bold mt-1 ${posMode === "selfservice" ? "text-lg" : ""}`}>
-                          ₦{item.price.toLocaleString()}
-                        </p>
-                        {item.description && (
-                          <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{item.description}</p>
-                        )}
-                      </div>
-                      <button 
-                        className="flex-shrink-0 w-8 h-8 rounded-full border border-border flex items-center justify-center hover:bg-muted transition-colors self-center"
-                        onClick={(e) => { e.stopPropagation(); handleItemClick(item); }}
-                      >
-                        <Plus className="w-4 h-4" />
-                      </button>
+                    <div className={`flex items-center justify-center rounded-xl bg-muted mb-3 ${
+                      posMode === "selfservice" ? "w-16 h-16 text-3xl" : "w-14 h-14 text-2xl"
+                    }`}>
+                      {item.image || "🍽️"}
+                    </div>
+                    <h3 className={`font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-2 ${
+                      posMode === "selfservice" ? "text-sm" : "text-xs"
+                    }`}>
+                      {item.name}
+                    </h3>
+                    <p className={`text-primary font-bold mt-1 ${posMode === "selfservice" ? "text-base" : "text-sm"}`}>
+                      ₦{item.price.toLocaleString()}
+                    </p>
+                    <div 
+                      className="mt-3 w-8 h-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center hover:bg-primary hover:text-primary-foreground transition-colors"
+                      onClick={(e) => { e.stopPropagation(); handleItemClick(item); }}
+                    >
+                      <Plus className="w-4 h-4 text-foreground" />
                     </div>
                   </button>
                 ))}
