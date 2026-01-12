@@ -13,6 +13,9 @@ import {
   X,
   RotateCcw,
   ArrowLeft,
+  Eye,
+  Wrench,
+  History,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +36,11 @@ import {
 } from "@/components/ui/select";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import ToastNotification from "@/components/ToastNotification";
+import ActivityLogButton from "@/components/ActivityLogButton";
+import ActivityLog from "@/components/ActivityLog";
+import ItemDetailsModal from "@/components/ItemDetailsModal";
+import GadgetManagement from "@/components/GadgetManagement";
+import UsageLogTab from "@/components/UsageLogTab";
 
 interface InventoryItem {
   id: string;
@@ -126,6 +134,8 @@ const InstorePage = () => {
   const [wasteNotes, setWasteNotes] = useState("");
   
   const [newItems, setNewItems] = useState<NewItem[]>([{ ...emptyNewItem }]);
+  const [showActivityLog, setShowActivityLog] = useState(false);
+  const [selectedItemForDetails, setSelectedItemForDetails] = useState<InventoryItem | null>(null);
 
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; description: string; action: () => void }>({
     open: false, title: "", description: "", action: () => {},
@@ -262,31 +272,42 @@ const InstorePage = () => {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="bg-card border-b border-border px-4 py-4">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => navigate("/dashboard")}
-            className="rounded-xl"
-          >
-            <ArrowLeft className="w-5 h-5 text-foreground" />
-          </Button>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
-              <Package className="w-5 h-5 text-foreground" />
-            </div>
-            <div>
-              <h1 className="text-xl font-semibold text-foreground">Instore Inventory</h1>
-              <p className="text-sm text-muted-foreground">{filteredItems.length} items in stock</p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate("/dashboard")}
+              className="rounded-xl"
+            >
+              <ArrowLeft className="w-5 h-5 text-foreground" />
+            </Button>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
+                <Package className="w-5 h-5 text-foreground" />
+              </div>
+              <div>
+                <h1 className="text-xl font-semibold text-foreground">Instore Inventory</h1>
+                <p className="text-sm text-muted-foreground">{filteredItems.length} items in stock</p>
+              </div>
             </div>
           </div>
+          <ActivityLogButton onClick={() => setShowActivityLog(true)} />
         </div>
       </div>
 
       <div className="p-4 lg:p-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
-          <TabsList className="bg-secondary/50 p-1 rounded-xl">
+          <TabsList className="bg-secondary/50 p-1 rounded-xl flex-wrap">
             <TabsTrigger value="inventory" className="rounded-lg data-[state=active]:bg-card">Inventory</TabsTrigger>
+            <TabsTrigger value="gadgets" className="rounded-lg data-[state=active]:bg-card">
+              <Wrench className="w-4 h-4 mr-1" />
+              Gadgets
+            </TabsTrigger>
+            <TabsTrigger value="usage" className="rounded-lg data-[state=active]:bg-card">
+              <History className="w-4 h-4 mr-1" />
+              Usage Log
+            </TabsTrigger>
             <TabsTrigger value="returns" className="rounded-lg data-[state=active]:bg-card">
               Pending Returns
               {pendingReturns.length > 0 && (
@@ -370,6 +391,7 @@ const InstorePage = () => {
                       <th className="p-4 text-left text-sm font-medium text-muted-foreground">Quantity</th>
                       <th className="p-4 text-left text-sm font-medium text-muted-foreground">Location</th>
                       <th className="p-4 text-left text-sm font-medium text-muted-foreground">Status</th>
+                      <th className="p-4 text-left text-sm font-medium text-muted-foreground">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -403,6 +425,16 @@ const InstorePage = () => {
                           ) : (
                             <Badge className="bg-green-100 text-green-700 rounded-lg">OK</Badge>
                           )}
+                        </td>
+                        <td className="p-4">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setSelectedItemForDetails(item)}
+                            className="rounded-lg"
+                          >
+                            <Eye className="w-4 h-4 text-foreground" />
+                          </Button>
                         </td>
                       </tr>
                     ))}
@@ -459,8 +491,33 @@ const InstorePage = () => {
               )}
             </div>
           </TabsContent>
+
+          <TabsContent value="gadgets" className="mt-6">
+            <GadgetManagement />
+          </TabsContent>
+
+          <TabsContent value="usage" className="mt-6">
+            <UsageLogTab />
+          </TabsContent>
         </Tabs>
       </div>
+
+      {/* Activity Log */}
+      <ActivityLog
+        open={showActivityLog}
+        onClose={() => setShowActivityLog(false)}
+        pageName="Instore Inventory"
+      />
+
+      {/* Item Details Modal */}
+      <ItemDetailsModal
+        open={!!selectedItemForDetails}
+        onClose={() => setSelectedItemForDetails(null)}
+        item={selectedItemForDetails ? {
+          ...selectedItemForDetails,
+          locationName: getLocationName(selectedItemForDetails.location)
+        } : null}
+      />
 
       {/* Add Items Modal */}
       <Dialog open={showAddModal} onOpenChange={setShowAddModal}>

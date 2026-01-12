@@ -12,6 +12,7 @@ import {
   Plus,
   X,
   ClipboardList,
+  Eye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +33,9 @@ import {
 } from "@/components/ui/select";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import ToastNotification from "@/components/ToastNotification";
+import ActivityLogButton from "@/components/ActivityLogButton";
+import ActivityLog from "@/components/ActivityLog";
+import ItemDetailsModal from "@/components/ItemDetailsModal";
 
 interface InventoryItem {
   id: string;
@@ -108,6 +112,8 @@ const OutstorePage = () => {
   const [usageFor, setUsageFor] = useState("");
   
   const [requestItems, setRequestItems] = useState<RequestItem[]>([{ ...emptyRequestItem }]);
+  const [showActivityLog, setShowActivityLog] = useState(false);
+  const [selectedItemForDetails, setSelectedItemForDetails] = useState<InventoryItem | null>(null);
 
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; description: string; action: () => void }>({
     open: false, title: "", description: "", action: () => {},
@@ -238,24 +244,27 @@ const OutstorePage = () => {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="bg-card border-b border-border px-4 py-4">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => navigate("/dashboard")}
-            className="rounded-xl"
-          >
-            <ArrowLeft className="w-5 h-5 text-foreground" />
-          </Button>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
-              <Package className="w-5 h-5 text-foreground" />
-            </div>
-            <div>
-              <h1 className="text-xl font-semibold text-foreground">Outstore Inventory</h1>
-              <p className="text-sm text-muted-foreground">{filteredItems.length} items in use</p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate("/dashboard")}
+              className="rounded-xl"
+            >
+              <ArrowLeft className="w-5 h-5 text-foreground" />
+            </Button>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
+                <Package className="w-5 h-5 text-foreground" />
+              </div>
+              <div>
+                <h1 className="text-xl font-semibold text-foreground">Outstore Inventory</h1>
+                <p className="text-sm text-muted-foreground">{filteredItems.length} items in use</p>
+              </div>
             </div>
           </div>
+          <ActivityLogButton onClick={() => setShowActivityLog(true)} />
         </div>
       </div>
 
@@ -350,6 +359,7 @@ const OutstorePage = () => {
                       <th className="p-4 text-left text-sm font-medium text-muted-foreground">Quantity</th>
                       <th className="p-4 text-left text-sm font-medium text-muted-foreground">Location</th>
                       <th className="p-4 text-left text-sm font-medium text-muted-foreground">Status</th>
+                      <th className="p-4 text-left text-sm font-medium text-muted-foreground">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -383,6 +393,16 @@ const OutstorePage = () => {
                           ) : (
                             <Badge className="bg-green-100 text-green-700 rounded-lg">OK</Badge>
                           )}
+                        </td>
+                        <td className="p-4">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setSelectedItemForDetails(item)}
+                            className="rounded-lg"
+                          >
+                            <Eye className="w-4 h-4 text-foreground" />
+                          </Button>
                         </td>
                       </tr>
                     ))}
@@ -607,6 +627,23 @@ const OutstorePage = () => {
         type={toast.type}
         title={toast.title}
         message={toast.message}
+      />
+
+      {/* Activity Log */}
+      <ActivityLog
+        open={showActivityLog}
+        onClose={() => setShowActivityLog(false)}
+        pageName="Outstore Inventory"
+      />
+
+      {/* Item Details Modal */}
+      <ItemDetailsModal
+        open={!!selectedItemForDetails}
+        onClose={() => setSelectedItemForDetails(null)}
+        item={selectedItemForDetails ? {
+          ...selectedItemForDetails,
+          locationName: getLocationName(selectedItemForDetails.location)
+        } : null}
       />
     </div>
   );
