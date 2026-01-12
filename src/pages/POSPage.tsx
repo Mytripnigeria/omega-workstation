@@ -55,6 +55,9 @@ import ReceiptModal from "@/components/ReceiptModal";
 import DiscountModal from "@/components/DiscountModal";
 import OrderHistoryModal from "@/components/OrderHistoryModal";
 import CountdownTimer from "@/components/CountdownTimer";
+import OrderNotificationPopup from "@/components/OrderNotificationPopup";
+import ActivityLog from "@/components/ActivityLog";
+import ActivityLogButton from "@/components/ActivityLogButton";
 import { useBeepSound } from "@/hooks/useBeepSound";
 
 interface Variation {
@@ -163,6 +166,16 @@ const POSPage = () => {
   const [toast, setToast] = useState<{ open: boolean; type: "success" | "error" | "warning" | "info"; title: string; message?: string }>({ open: false, type: "success", title: "" });
   const [currentReceipt, setCurrentReceipt] = useState<IncomingOrder | null>(null);
   const [copied, setCopied] = useState(false);
+  const [showActivityLog, setShowActivityLog] = useState(false);
+  const [orderNotification, setOrderNotification] = useState<{
+    id: string;
+    orderNumber: string;
+    source: "ubereats" | "deliveroo" | "website" | "selfservice";
+    customerName: string;
+    itemCount: number;
+    total: number;
+    timestamp: Date;
+  } | null>(null);
   
   const [orderType, setOrderType] = useState<"dine-in" | "takeaway" | "delivery">("dine-in");
   const [customerName, setCustomerName] = useState("");
@@ -174,6 +187,34 @@ const POSPage = () => {
   };
 
   const playBeep = useBeepSound();
+
+  // Simulate incoming orders from external platforms
+  useEffect(() => {
+    const simulateExternalOrder = () => {
+      const sources: ("ubereats" | "deliveroo" | "website")[] = ["ubereats", "deliveroo", "website"];
+      const randomSource = sources[Math.floor(Math.random() * sources.length)];
+      const orderNumber = `#EXT${Date.now().toString().slice(-4)}`;
+      
+      setOrderNotification({
+        id: orderNumber,
+        orderNumber,
+        source: randomSource,
+        customerName: ["Ada Eze", "Chidi Obi", "Amaka Nweke"][Math.floor(Math.random() * 3)],
+        itemCount: Math.floor(Math.random() * 5) + 1,
+        total: Math.floor(Math.random() * 10000) + 3000,
+        timestamp: new Date(),
+      });
+    };
+
+    // Simulate an order after 30 seconds, then every 2 minutes
+    const initialTimeout = setTimeout(simulateExternalOrder, 30000);
+    const interval = setInterval(simulateExternalOrder, 120000);
+
+    return () => {
+      clearTimeout(initialTimeout);
+      clearInterval(interval);
+    };
+  }, []);
 
   const filteredItems = menuItems.filter((item) => {
     const matchesCategory = item.category === selectedCategory;
@@ -383,6 +424,8 @@ const POSPage = () => {
           </div>
           
           <div className="flex items-center gap-3">
+            <ActivityLogButton onClick={() => setShowActivityLog(true)} />
+            
             {/* Mode Toggle */}
             <div className="flex items-center bg-muted rounded-full p-1">
               <button
@@ -830,6 +873,23 @@ const POSPage = () => {
       <OrderHistoryModal open={showHistoryModal} onClose={() => setShowHistoryModal(false)} orders={mockOrderHistory} onRecallOrder={(o) => { }} onPrintReceipt={(o) => { }} />
       {currentReceipt && <ReceiptModal open={showReceiptModal} onClose={() => { setShowReceiptModal(false); setCurrentReceipt(null); setSelfServiceReceipt(null); }} orderId={currentReceipt.id} items={currentReceipt.items} subtotal={currentReceipt.total * 0.925} tax={currentReceipt.total * 0.075} total={currentReceipt.total} customerName={currentReceipt.customerName} />}
       {selfServiceReceipt && !currentReceipt && <ReceiptModal open={showReceiptModal} onClose={() => { setShowReceiptModal(false); setSelfServiceReceipt(null); }} orderId={selfServiceReceipt.id} items={selfServiceReceipt.items} subtotal={selfServiceReceipt.total * 0.925} tax={selfServiceReceipt.total * 0.075} total={selfServiceReceipt.total} customerName={selfServiceReceipt.customerName} />}
+      
+      {/* Order Notification Popup */}
+      <OrderNotificationPopup 
+        notification={orderNotification}
+        onDismiss={() => setOrderNotification(null)}
+        onViewOrder={() => {
+          setOrderNotification(null);
+          setActiveTab("orders");
+        }}
+      />
+      
+      {/* Activity Log */}
+      <ActivityLog 
+        open={showActivityLog} 
+        onClose={() => setShowActivityLog(false)} 
+        pageName="Counter POS" 
+      />
     </div>
   );
 };

@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { useRef } from "react";
 
 interface OrderItem {
   name: string;
@@ -42,8 +43,60 @@ const ReceiptModal = ({
   tableNumber,
   date = new Date(),
 }: ReceiptModalProps) => {
+  const receiptRef = useRef<HTMLDivElement>(null);
+
   const handlePrint = () => {
-    window.print();
+    if (!receiptRef.current) return;
+    
+    const printContent = receiptRef.current.innerHTML;
+    const printWindow = window.open('', '', 'width=300,height=600');
+    if (!printWindow) return;
+    
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Receipt ${orderId}</title>
+          <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { 
+              font-family: 'Courier New', monospace; 
+              font-size: 12px; 
+              padding: 10px;
+              max-width: 80mm;
+              margin: 0 auto;
+            }
+            .receipt-header { text-align: center; margin-bottom: 15px; }
+            .receipt-header h3 { font-size: 16px; font-weight: bold; }
+            .receipt-header p { font-size: 10px; color: #666; }
+            .separator { border-top: 1px dashed #333; margin: 10px 0; }
+            .order-info { margin-bottom: 10px; }
+            .order-info div { display: flex; justify-content: space-between; margin-bottom: 3px; font-size: 11px; }
+            .items { margin-bottom: 10px; }
+            .item { margin-bottom: 8px; }
+            .item-row { display: flex; justify-content: space-between; }
+            .item-variation { font-size: 10px; color: #666; margin-left: 10px; }
+            .totals { margin-bottom: 10px; }
+            .totals div { display: flex; justify-content: space-between; margin-bottom: 3px; font-size: 11px; }
+            .totals .total-row { font-weight: bold; font-size: 14px; margin-top: 5px; }
+            .discount { color: #22c55e; }
+            .qr-placeholder { text-align: center; margin: 15px 0; }
+            .qr-box { width: 60px; height: 60px; border: 1px solid #333; margin: 0 auto 5px; display: flex; align-items: center; justify-content: center; font-size: 10px; }
+            .footer { text-align: center; font-size: 10px; color: #666; }
+            @media print {
+              body { padding: 0; }
+            }
+          </style>
+        </head>
+        <body>
+          ${printContent}
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+    printWindow.close();
   };
 
   return (
@@ -58,18 +111,18 @@ const ReceiptModal = ({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="bg-card border border-border rounded-lg p-4 font-mono text-sm">
+        <div ref={receiptRef} className="bg-card border border-border rounded-lg p-4 font-mono text-sm">
           {/* Header */}
-          <div className="text-center mb-4">
+          <div className="receipt-header text-center mb-4">
             <h3 className="font-bold text-lg text-foreground">Mr. Jollof</h3>
             <p className="text-muted-foreground text-xs">Makurdi Branch</p>
             <p className="text-muted-foreground text-xs">123 Main Street, Makurdi</p>
           </div>
 
-          <Separator className="my-3" />
+          <Separator className="my-3 separator" />
 
           {/* Order Info */}
-          <div className="space-y-1 mb-3 text-xs">
+          <div className="order-info space-y-1 mb-3 text-xs">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Order:</span>
               <span className="text-foreground">{orderId}</span>
@@ -96,35 +149,35 @@ const ReceiptModal = ({
             )}
           </div>
 
-          <Separator className="my-3" />
+          <Separator className="my-3 separator" />
 
           {/* Items */}
-          <div className="space-y-2 mb-3">
+          <div className="items space-y-2 mb-3">
             {items.map((item, idx) => (
-              <div key={idx}>
-                <div className="flex justify-between">
+              <div key={idx} className="item">
+                <div className="item-row flex justify-between">
                   <span className="text-foreground">
                     {item.quantity}x {item.name}
                   </span>
                   <span className="text-foreground">₦{(item.price * item.quantity).toLocaleString()}</span>
                 </div>
                 {item.variationText && (
-                  <p className="text-xs text-muted-foreground ml-4">{item.variationText}</p>
+                  <p className="item-variation text-xs text-muted-foreground ml-4">{item.variationText}</p>
                 )}
               </div>
             ))}
           </div>
 
-          <Separator className="my-3" />
+          <Separator className="my-3 separator" />
 
           {/* Totals */}
-          <div className="space-y-1 text-xs">
+          <div className="totals space-y-1 text-xs">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Subtotal:</span>
               <span className="text-foreground">₦{subtotal.toLocaleString()}</span>
             </div>
             {discount > 0 && (
-              <div className="flex justify-between text-status-success">
+              <div className="flex justify-between text-status-success discount">
                 <span>Discount:</span>
                 <span>-₦{discount.toLocaleString()}</span>
               </div>
@@ -133,24 +186,24 @@ const ReceiptModal = ({
               <span className="text-muted-foreground">VAT (7.5%):</span>
               <span className="text-foreground">₦{tax.toLocaleString()}</span>
             </div>
-            <Separator className="my-2" />
-            <div className="flex justify-between font-bold text-base">
+            <Separator className="my-2 separator" />
+            <div className="total-row flex justify-between font-bold text-base">
               <span className="text-foreground">Total:</span>
               <span className="text-primary">₦{total.toLocaleString()}</span>
             </div>
           </div>
 
-          <Separator className="my-3" />
+          <Separator className="my-3 separator" />
 
           {/* QR Code Placeholder */}
-          <div className="text-center">
-            <div className="inline-flex items-center justify-center w-20 h-20 bg-secondary rounded-lg mb-2">
+          <div className="qr-placeholder text-center">
+            <div className="inline-flex items-center justify-center w-20 h-20 bg-secondary rounded-lg mb-2 qr-box">
               <QrCode className="w-12 h-12 text-muted-foreground" />
             </div>
             <p className="text-xs text-muted-foreground">Scan for feedback</p>
           </div>
 
-          <div className="text-center mt-4 text-xs text-muted-foreground">
+          <div className="footer text-center mt-4 text-xs text-muted-foreground">
             <p>Thank you for dining with us!</p>
             <p>www.mrjollof.com</p>
           </div>
