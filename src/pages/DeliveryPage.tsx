@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import DeliveryModal from "@/components/DeliveryModal";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import ActivityLogButton from "@/components/ActivityLogButton";
+import ActivityLog from "@/components/ActivityLog";
 
 interface DeliveryOrder {
   id: string;
@@ -41,6 +43,7 @@ const DeliveryPage = () => {
   const [selectedDelivery, setSelectedDelivery] = useState<DeliveryOrder | null>(null);
   const [activeTab, setActiveTab] = useState("new");
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; description: string; action: () => void }>({ open: false, title: "", description: "", action: () => {} });
+  const [showActivityLog, setShowActivityLog] = useState(false);
   const [, setTick] = useState(0);
 
   useEffect(() => {
@@ -169,6 +172,7 @@ const DeliveryPage = () => {
               </div>
             </div>
           </div>
+          <ActivityLogButton onClick={() => setShowActivityLog(true)} />
         </div>
       </header>
 
@@ -253,6 +257,7 @@ const DeliveryPage = () => {
 
       <DeliveryModal delivery={selectedDelivery} onClose={() => setSelectedDelivery(null)} onUpdateStatus={updateStatus} />
       <ConfirmDialog open={confirmDialog.open} onOpenChange={(open) => setConfirmDialog({ ...confirmDialog, open })} title={confirmDialog.title} description={confirmDialog.description} onConfirm={() => { confirmDialog.action(); setConfirmDialog({ ...confirmDialog, open: false }); }} />
+      <ActivityLog open={showActivityLog} onClose={() => setShowActivityLog(false)} pageName="Delivery Rider" />
     </div>
   );
 };

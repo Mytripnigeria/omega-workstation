@@ -23,6 +23,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useNavigate } from "react-router-dom";
+import ActivityLogButton from "@/components/ActivityLogButton";
+import ActivityLog from "@/components/ActivityLog";
 
 interface PerformanceMetric {
   label: string;
@@ -86,6 +88,7 @@ const ReportsPage = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("overview");
   const [timePeriod, setTimePeriod] = useState("today");
+  const [showActivityLog, setShowActivityLog] = useState(false);
 
   return (
     <div className="min-h-screen bg-background">
@@ -108,9 +111,9 @@ const ReportsPage = () => {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Filter className="w-4 h-4 text-foreground" />
               <Select value={timePeriod} onValueChange={setTimePeriod}>
                 <SelectTrigger className="w-[140px] rounded-xl">
+                  <Filter className="w-4 h-4 mr-2" />
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -121,6 +124,7 @@ const ReportsPage = () => {
                   <SelectItem value="this-month">This Month</SelectItem>
                 </SelectContent>
               </Select>
+              <ActivityLogButton onClick={() => setShowActivityLog(true)} />
             </div>
           </div>
         </div>
@@ -337,6 +341,8 @@ const ReportsPage = () => {
           </TabsContent>
         </Tabs>
       </main>
+
+      <ActivityLog open={showActivityLog} onClose={() => setShowActivityLog(false)} pageName="Reports" />
     </div>
   );
 };

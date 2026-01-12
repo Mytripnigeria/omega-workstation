@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Users, Clock, Monitor, Package, Globe, Smartphone, Utensils, Bike, ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
+import ActivityLogButton from "@/components/ActivityLogButton";
+import ActivityLog from "@/components/ActivityLog";
 
 interface WaitingCustomer {
   id: string;
@@ -70,6 +72,7 @@ const mockWaitingCustomers: WaitingCustomer[] = [
 const LobbyPage = () => {
   const navigate = useNavigate();
   const [customers] = useState<WaitingCustomer[]>(mockWaitingCustomers);
+  const [showActivityLog, setShowActivityLog] = useState(false);
 
   const getRemainingTime = (customer: WaitingCustomer) => {
     const now = new Date();
@@ -127,19 +130,22 @@ const LobbyPage = () => {
       {/* Header */}
       <header className="bg-card border-b border-border sticky top-0 z-50">
         <div className="px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center gap-4">
-            <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-muted rounded-xl transition-colors">
-              <ArrowLeft className="w-5 h-5 text-foreground" />
-            </button>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
-                <Users className="w-5 h-5 text-foreground" />
-              </div>
-              <div>
-                <h1 className="text-lg font-bold text-foreground">Order Lobby</h1>
-                <p className="text-xs text-muted-foreground">{customers.length} customers waiting</p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-muted rounded-xl transition-colors">
+                <ArrowLeft className="w-5 h-5 text-foreground" />
+              </button>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
+                  <Users className="w-5 h-5 text-foreground" />
+                </div>
+                <div>
+                  <h1 className="text-lg font-bold text-foreground">Order Lobby</h1>
+                  <p className="text-xs text-muted-foreground">{customers.length} customers waiting</p>
+                </div>
               </div>
             </div>
+            <ActivityLogButton onClick={() => setShowActivityLog(true)} />
           </div>
         </div>
       </header>
@@ -225,6 +231,8 @@ const LobbyPage = () => {
           })}
         </div>
       </main>
+
+      <ActivityLog open={showActivityLog} onClose={() => setShowActivityLog(false)} pageName="Order Lobby" />
     </div>
   );
 };

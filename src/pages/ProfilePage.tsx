@@ -24,6 +24,8 @@ import {
 } from "@/components/ui/dialog";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { useNavigate } from "react-router-dom";
+import ActivityLogButton from "@/components/ActivityLogButton";
+import ActivityLog from "@/components/ActivityLog";
 
 interface Notification {
   id: string;
@@ -58,6 +60,7 @@ const ProfilePage = () => {
   const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [showPinModal, setShowPinModal] = useState(false);
+  const [showActivityLog, setShowActivityLog] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean;
     title: string;
@@ -89,19 +92,22 @@ const ProfilePage = () => {
       {/* Header */}
       <header className="bg-card border-b border-border sticky top-0 z-50">
         <div className="px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center gap-4">
-            <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-muted rounded-xl transition-colors">
-              <ArrowLeft className="w-5 h-5 text-foreground" />
-            </button>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
-                <User className="w-5 h-5 text-foreground" />
-              </div>
-              <div>
-                <h1 className="text-lg font-bold text-foreground">Work Profile</h1>
-                <p className="text-xs text-muted-foreground">Manage your account</p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-muted rounded-xl transition-colors">
+                <ArrowLeft className="w-5 h-5 text-foreground" />
+              </button>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
+                  <User className="w-5 h-5 text-foreground" />
+                </div>
+                <div>
+                  <h1 className="text-lg font-bold text-foreground">Work Profile</h1>
+                  <p className="text-xs text-muted-foreground">Manage your account</p>
+                </div>
               </div>
             </div>
+            <ActivityLogButton onClick={() => setShowActivityLog(true)} />
           </div>
         </div>
       </header>
@@ -381,6 +387,7 @@ const ProfilePage = () => {
         onConfirm={confirmDialog.onConfirm}
         confirmText="OK"
       />
+      <ActivityLog open={showActivityLog} onClose={() => setShowActivityLog(false)} pageName="Work Profile" />
     </div>
   );
 };
