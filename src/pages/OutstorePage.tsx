@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Package,
   Search,
@@ -29,7 +30,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import PageHeader from "@/components/PageHeader";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import ToastNotification from "@/components/ToastNotification";
 
@@ -90,6 +90,7 @@ const mockUsageLogs: UsageLog[] = [
 const emptyRequestItem: RequestItem = { name: "", quantity: "", unit: "", fromLocation: "" };
 
 const OutstorePage = () => {
+  const navigate = useNavigate();
   const [items, setItems] = useState<InventoryItem[]>(mockItems);
   const [usageLogs] = useState<UsageLog[]>(mockUsageLogs);
   const [searchQuery, setSearchQuery] = useState("");
@@ -106,7 +107,6 @@ const OutstorePage = () => {
   const [wasteNotes, setWasteNotes] = useState("");
   const [usageFor, setUsageFor] = useState("");
   
-  // Request items from instore
   const [requestItems, setRequestItems] = useState<RequestItem[]>([{ ...emptyRequestItem }]);
 
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; description: string; action: () => void }>({
@@ -235,163 +235,184 @@ const OutstorePage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background p-3 sm:p-4 lg:p-6">
-      <PageHeader
-        title="Outstore Inventory"
-        icon={Package}
-        iconColor="text-category-coral"
-        badge={`${filteredItems.length} Items`}
-      />
-
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-4">
-        <TabsList>
-          <TabsTrigger value="inventory">Inventory</TabsTrigger>
-          <TabsTrigger value="usage">Usage Log</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="inventory" className="mt-4">
-          {/* Actions Bar */}
-          <div className="flex flex-wrap gap-2 mb-4">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Search items..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-              />
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <div className="bg-card border-b border-border px-4 py-4">
+        <div className="flex items-center gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigate("/dashboard")}
+            className="rounded-xl"
+          >
+            <ArrowLeft className="w-5 h-5 text-foreground" />
+          </Button>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
+              <Package className="w-5 h-5 text-foreground" />
             </div>
-            <Select value={selectedLocation} onValueChange={setSelectedLocation}>
-              <SelectTrigger className="w-[180px]">
-                <Filter className="w-4 h-4 mr-2" />
-                <SelectValue placeholder="All Locations" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Locations</SelectItem>
-                {outstoreLocations.map((loc) => (
-                  <SelectItem key={loc.id} value={loc.id}>
-                    {loc.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div>
+              <h1 className="text-xl font-semibold text-foreground">Outstore Inventory</h1>
+              <p className="text-sm text-muted-foreground">{filteredItems.length} items in use</p>
+            </div>
           </div>
+        </div>
+      </div>
 
-          {/* Action Buttons */}
-          <div className="flex flex-wrap gap-2 mb-6">
-            <Button onClick={() => setShowRequestModal(true)} className="gradient-primary">
-              <Plus className="w-4 h-4 mr-2" />
-              Request from Instore
-            </Button>
-            <Button
-              variant="outline"
-              disabled={selectedItems.length === 0}
-              onClick={() => setShowReturnModal(true)}
-            >
-              <RotateCcw className="w-4 h-4 mr-2" />
-              Return to Instore
-            </Button>
-            <Button
-              variant="outline"
-              disabled={selectedItems.length === 0}
-              onClick={() => setShowLogUsageModal(true)}
-            >
-              <ClipboardList className="w-4 h-4 mr-2" />
-              Log Usage
-            </Button>
-            <Button
-              variant="outline"
-              disabled={selectedItems.length === 0}
-              onClick={() => setShowWasteModal(true)}
-            >
-              <Trash2 className="w-4 h-4 mr-2" />
-              Report Waste
-            </Button>
-          </div>
+      <div className="p-4 lg:p-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
+          <TabsList className="bg-secondary/50 p-1 rounded-xl">
+            <TabsTrigger value="inventory" className="rounded-lg data-[state=active]:bg-card">Inventory</TabsTrigger>
+            <TabsTrigger value="usage" className="rounded-lg data-[state=active]:bg-card">Usage Log</TabsTrigger>
+          </TabsList>
 
-          {/* Inventory Table */}
-          <div className="bg-card border border-border rounded-xl overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-secondary/50">
-                  <tr>
-                    <th className="p-3 text-left">
-                      <input
-                        type="checkbox"
-                        checked={selectedItems.length === filteredItems.length && filteredItems.length > 0}
-                        onChange={(e) =>
-                          setSelectedItems(e.target.checked ? filteredItems.map((i) => i.id) : [])
-                        }
-                        className="rounded border-border"
-                      />
-                    </th>
-                    <th className="p-3 text-left text-sm font-medium text-muted-foreground">Item</th>
-                    <th className="p-3 text-left text-sm font-medium text-muted-foreground">Category</th>
-                    <th className="p-3 text-left text-sm font-medium text-muted-foreground">Quantity</th>
-                    <th className="p-3 text-left text-sm font-medium text-muted-foreground">Location</th>
-                    <th className="p-3 text-left text-sm font-medium text-muted-foreground">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredItems.map((item) => (
-                    <tr key={item.id} className="border-t border-border hover:bg-secondary/20">
-                      <td className="p-3">
+          <TabsContent value="inventory" className="mt-6">
+            {/* Search and Filter */}
+            <div className="flex flex-col sm:flex-row gap-3 mb-6">
+              <div className="relative flex-1">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-foreground" />
+                <Input
+                  placeholder="Search items..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-12 h-12 rounded-xl border-border"
+                />
+              </div>
+              <Select value={selectedLocation} onValueChange={setSelectedLocation}>
+                <SelectTrigger className="w-full sm:w-[200px] h-12 rounded-xl">
+                  <Filter className="w-4 h-4 mr-2 text-foreground" />
+                  <SelectValue placeholder="All Locations" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Locations</SelectItem>
+                  {outstoreLocations.map((loc) => (
+                    <SelectItem key={loc.id} value={loc.id}>
+                      {loc.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex flex-wrap gap-3 mb-6">
+              <Button onClick={() => setShowRequestModal(true)} className="rounded-xl h-11">
+                <Plus className="w-4 h-4 mr-2 text-foreground" />
+                Request from Instore
+              </Button>
+              <Button
+                variant="outline"
+                disabled={selectedItems.length === 0}
+                onClick={() => setShowReturnModal(true)}
+                className="rounded-xl h-11"
+              >
+                <RotateCcw className="w-4 h-4 mr-2 text-foreground" />
+                Return to Instore
+              </Button>
+              <Button
+                variant="outline"
+                disabled={selectedItems.length === 0}
+                onClick={() => setShowLogUsageModal(true)}
+                className="rounded-xl h-11"
+              >
+                <ClipboardList className="w-4 h-4 mr-2 text-foreground" />
+                Log Usage
+              </Button>
+              <Button
+                variant="outline"
+                disabled={selectedItems.length === 0}
+                onClick={() => setShowWasteModal(true)}
+                className="rounded-xl h-11"
+              >
+                <Trash2 className="w-4 h-4 mr-2 text-foreground" />
+                Report Waste
+              </Button>
+            </div>
+
+            {/* Inventory Table */}
+            <div className="bg-card border border-border rounded-2xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-secondary/50">
+                    <tr>
+                      <th className="p-4 text-left">
                         <input
                           type="checkbox"
-                          checked={selectedItems.includes(item.id)}
-                          onChange={() => toggleItemSelection(item.id)}
-                          className="rounded border-border"
+                          checked={selectedItems.length === filteredItems.length && filteredItems.length > 0}
+                          onChange={(e) =>
+                            setSelectedItems(e.target.checked ? filteredItems.map((i) => i.id) : [])
+                          }
+                          className="rounded border-border w-5 h-5"
                         />
-                      </td>
-                      <td className="p-3 font-medium text-foreground">{item.name}</td>
-                      <td className="p-3 text-muted-foreground">{item.category}</td>
-                      <td className="p-3 text-foreground">
-                        {item.quantity} {item.unit}
-                      </td>
-                      <td className="p-3">
-                        <Badge variant="outline" className="flex items-center gap-1 w-fit">
-                          <MapPin className="w-3 h-3" />
-                          {getLocationName(item.location)}
-                        </Badge>
-                      </td>
-                      <td className="p-3">
-                        {isLowStock(item) ? (
-                          <Badge className="bg-status-warning text-foreground flex items-center gap-1 w-fit">
-                            <AlertTriangle className="w-3 h-3" />
-                            Low Stock
-                          </Badge>
-                        ) : (
-                          <Badge className="bg-status-success text-white">OK</Badge>
-                        )}
-                      </td>
+                      </th>
+                      <th className="p-4 text-left text-sm font-medium text-muted-foreground">Item</th>
+                      <th className="p-4 text-left text-sm font-medium text-muted-foreground">Category</th>
+                      <th className="p-4 text-left text-sm font-medium text-muted-foreground">Quantity</th>
+                      <th className="p-4 text-left text-sm font-medium text-muted-foreground">Location</th>
+                      <th className="p-4 text-left text-sm font-medium text-muted-foreground">Status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="usage" className="mt-4">
-          <div className="space-y-3">
-            {usageLogs.map((log) => (
-              <div key={log.id} className="bg-card border border-border rounded-xl p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-medium text-foreground">{log.itemName}</span>
-                  <span className="text-sm text-muted-foreground">{formatTime(log.usedAt)}</span>
-                </div>
-                <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                  <span>{log.quantity} {log.unit}</span>
-                  <span>•</span>
-                  <span>{log.usedFor}</span>
-                  <span>•</span>
-                  <span>by {log.usedBy}</span>
-                </div>
+                  </thead>
+                  <tbody>
+                    {filteredItems.map((item) => (
+                      <tr key={item.id} className="border-t border-border hover:bg-secondary/20 transition-colors">
+                        <td className="p-4">
+                          <input
+                            type="checkbox"
+                            checked={selectedItems.includes(item.id)}
+                            onChange={() => toggleItemSelection(item.id)}
+                            className="rounded border-border w-5 h-5"
+                          />
+                        </td>
+                        <td className="p-4 font-medium text-foreground">{item.name}</td>
+                        <td className="p-4 text-muted-foreground">{item.category}</td>
+                        <td className="p-4 text-foreground font-medium">
+                          {item.quantity} {item.unit}
+                        </td>
+                        <td className="p-4">
+                          <Badge variant="outline" className="flex items-center gap-1.5 w-fit rounded-lg">
+                            <MapPin className="w-3 h-3 text-foreground" />
+                            {getLocationName(item.location)}
+                          </Badge>
+                        </td>
+                        <td className="p-4">
+                          {isLowStock(item) ? (
+                            <Badge className="bg-amber-100 text-amber-700 flex items-center gap-1.5 w-fit rounded-lg">
+                              <AlertTriangle className="w-3 h-3" />
+                              Low Stock
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-green-100 text-green-700 rounded-lg">OK</Badge>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            ))}
-          </div>
-        </TabsContent>
-      </Tabs>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="usage" className="mt-6">
+            <div className="space-y-4">
+              {usageLogs.map((log) => (
+                <div key={log.id} className="bg-card border border-border rounded-2xl p-5">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-semibold text-foreground">{log.itemName}</span>
+                    <span className="text-sm text-muted-foreground">{formatTime(log.usedAt)}</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                    <Badge variant="outline" className="rounded-lg">{log.quantity} {log.unit}</Badge>
+                    <span>•</span>
+                    <span>{log.usedFor}</span>
+                    <span>•</span>
+                    <span>by {log.usedBy}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </TabsContent>
+        </Tabs>
+      </div>
 
       {/* Request Items Modal */}
       <Dialog open={showRequestModal} onOpenChange={setShowRequestModal}>
@@ -401,12 +422,12 @@ const OutstorePage = () => {
           </DialogHeader>
           <div className="space-y-4 py-4">
             {requestItems.map((item, index) => (
-              <div key={index} className="bg-secondary/30 rounded-lg p-4 space-y-3">
+              <div key={index} className="bg-secondary/30 rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-foreground">Item {index + 1}</span>
                   {requestItems.length > 1 && (
-                    <Button size="sm" variant="ghost" onClick={() => handleRemoveRequestItem(index)}>
-                      <X className="w-4 h-4" />
+                    <Button size="sm" variant="ghost" onClick={() => handleRemoveRequestItem(index)} className="rounded-lg">
+                      <X className="w-4 h-4 text-foreground" />
                     </Button>
                   )}
                 </div>
@@ -414,22 +435,25 @@ const OutstorePage = () => {
                   placeholder="Item name *" 
                   value={item.name}
                   onChange={(e) => updateRequestItem(index, "name", e.target.value)}
+                  className="rounded-xl"
                 />
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-3">
                   <Input 
                     placeholder="Quantity *" 
                     type="number"
                     value={item.quantity}
                     onChange={(e) => updateRequestItem(index, "quantity", e.target.value)}
+                    className="rounded-xl"
                   />
                   <Input 
                     placeholder="Unit (kg, L, pcs) *"
                     value={item.unit}
                     onChange={(e) => updateRequestItem(index, "unit", e.target.value)}
+                    className="rounded-xl"
                   />
                 </div>
                 <Select value={item.fromLocation} onValueChange={(v) => updateRequestItem(index, "fromLocation", v)}>
-                  <SelectTrigger>
+                  <SelectTrigger className="rounded-xl">
                     <SelectValue placeholder="From location *" />
                   </SelectTrigger>
                   <SelectContent>
@@ -442,30 +466,35 @@ const OutstorePage = () => {
                 </Select>
               </div>
             ))}
-            <Button variant="outline" className="w-full" onClick={handleAddRequestItem}>
-              <Plus className="w-4 h-4 mr-2" />
+            <Button variant="outline" onClick={handleAddRequestItem} className="w-full rounded-xl">
+              <Plus className="w-4 h-4 mr-2 text-foreground" />
               Add Another Item
             </Button>
           </div>
-          <Button className="w-full gradient-primary" onClick={handleSubmitRequest}>
-            Submit Request
-          </Button>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <Button variant="outline" onClick={() => setShowRequestModal(false)} className="rounded-xl">
+              Cancel
+            </Button>
+            <Button onClick={handleSubmitRequest} className="rounded-xl">
+              Submit Request
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
-      {/* Return Modal */}
+      {/* Return Items Modal */}
       <Dialog open={showReturnModal} onOpenChange={setShowReturnModal}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Return Items to Instore</DialogTitle>
+            <DialogTitle>Return to Instore</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <p className="text-muted-foreground text-sm">
-              Returning {selectedItems.length} item(s) to instore location.
+          <div className="py-4 space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Returning {selectedItems.length} item(s) to instore
             </p>
             <Select value={returnDestination} onValueChange={setReturnDestination}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select destination" />
+              <SelectTrigger className="rounded-xl">
+                <SelectValue placeholder="Select destination *" />
               </SelectTrigger>
               <SelectContent>
                 {instoreLocations.map((loc) => (
@@ -475,19 +504,19 @@ const OutstorePage = () => {
                 ))}
               </SelectContent>
             </Select>
-            <Input 
-              placeholder="Reason for return *"
+            <Input
+              placeholder="Reason for return..."
               value={returnReason}
               onChange={(e) => setReturnReason(e.target.value)}
+              className="rounded-xl"
             />
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" className="flex-1" onClick={() => setShowReturnModal(false)}>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <Button variant="outline" onClick={() => setShowReturnModal(false)} className="rounded-xl">
               Cancel
             </Button>
-            <Button className="flex-1 gradient-primary" onClick={handleReturnItems}>
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Submit Return
+            <Button onClick={handleReturnItems} className="rounded-xl">
+              Request Return
             </Button>
           </div>
         </DialogContent>
@@ -495,26 +524,26 @@ const OutstorePage = () => {
 
       {/* Log Usage Modal */}
       <Dialog open={showLogUsageModal} onOpenChange={setShowLogUsageModal}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Log Item Usage</DialogTitle>
+            <DialogTitle>Log Usage</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <p className="text-muted-foreground text-sm">
-              Logging usage for {selectedItems.length} item(s).
+          <div className="py-4 space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Logging usage for {selectedItems.length} item(s)
             </p>
-            <Input 
+            <Input
               placeholder="Used for (e.g., Jollof Rice prep) *"
               value={usageFor}
               onChange={(e) => setUsageFor(e.target.value)}
+              className="rounded-xl"
             />
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" className="flex-1" onClick={() => setShowLogUsageModal(false)}>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <Button variant="outline" onClick={() => setShowLogUsageModal(false)} className="rounded-xl">
               Cancel
             </Button>
-            <Button className="flex-1 gradient-primary" onClick={handleLogUsage}>
-              <ClipboardList className="w-4 h-4 mr-2" />
+            <Button onClick={handleLogUsage} className="rounded-xl">
               Log Usage
             </Button>
           </div>
@@ -523,57 +552,61 @@ const OutstorePage = () => {
 
       {/* Waste Report Modal */}
       <Dialog open={showWasteModal} onOpenChange={setShowWasteModal}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Report Waste/Damage</DialogTitle>
+            <DialogTitle>Report Waste</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <p className="text-muted-foreground text-sm">
-              Reporting waste for {selectedItems.length} item(s).
+          <div className="py-4 space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Reporting {selectedItems.length} item(s) as waste
             </p>
             <Select value={wasteReason} onValueChange={setWasteReason}>
-              <SelectTrigger>
-                <SelectValue placeholder="Reason" />
+              <SelectTrigger className="rounded-xl">
+                <SelectValue placeholder="Reason for waste *" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="expired">Expired</SelectItem>
-                <SelectItem value="damaged">Damaged</SelectItem>
                 <SelectItem value="spoiled">Spoiled</SelectItem>
+                <SelectItem value="damaged">Damaged</SelectItem>
                 <SelectItem value="contaminated">Contaminated</SelectItem>
                 <SelectItem value="other">Other</SelectItem>
               </SelectContent>
             </Select>
-            <Input 
-              placeholder="Additional notes (optional)"
+            <Input
+              placeholder="Additional notes..."
               value={wasteNotes}
               onChange={(e) => setWasteNotes(e.target.value)}
+              className="rounded-xl"
             />
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" className="flex-1" onClick={() => setShowWasteModal(false)}>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <Button variant="outline" onClick={() => setShowWasteModal(false)} className="rounded-xl">
               Cancel
             </Button>
-            <Button className="flex-1 bg-destructive hover:bg-destructive/90" onClick={handleReportWaste}>
-              <Trash2 className="w-4 h-4 mr-2" />
+            <Button onClick={handleReportWaste} variant="destructive" className="rounded-xl">
               Report Waste
             </Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      <ConfirmDialog 
-        open={confirmDialog.open} 
-        onOpenChange={(open) => setConfirmDialog({ ...confirmDialog, open })} 
-        title={confirmDialog.title} 
-        description={confirmDialog.description} 
-        onConfirm={() => { confirmDialog.action(); setConfirmDialog({ ...confirmDialog, open: false }); }} 
+      <ConfirmDialog
+        open={confirmDialog.open}
+        onOpenChange={(open) => setConfirmDialog({ ...confirmDialog, open })}
+        title={confirmDialog.title}
+        description={confirmDialog.description}
+        onConfirm={() => {
+          confirmDialog.action();
+          setConfirmDialog({ ...confirmDialog, open: false });
+        }}
       />
-      <ToastNotification 
-        open={toast.open} 
-        onClose={() => setToast({ ...toast, open: false })} 
-        type={toast.type} 
-        title={toast.title} 
-        message={toast.message} 
+
+      <ToastNotification
+        open={toast.open}
+        onClose={() => setToast({ ...toast, open: false })}
+        type={toast.type}
+        title={toast.title}
+        message={toast.message}
       />
     </div>
   );
