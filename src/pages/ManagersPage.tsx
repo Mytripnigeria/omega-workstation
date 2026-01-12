@@ -28,28 +28,30 @@ import {
   Minus,
   X,
   ArrowLeft,
+  Utensils,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import ActivityLog from "@/components/ActivityLog";
+import ActivityLogButton from "@/components/ActivityLogButton";
 
 interface StaffOnShift {
   id: string;
   name: string;
   position: string;
+  section: "kitchen" | "floor" | "counter" | "delivery";
   clockedIn: Date;
   status: "active" | "on-break" | "idle";
   ordersCompleted?: number;
   avgServiceTime?: string;
   rating?: number;
+  schedule: { start: number; end: number }; // hours 0-24
+  breaks: { start: number; end: number }[];
+  onTaskTime: number; // percentage
+  offTaskTime: number; // percentage
 }
 
 interface StaffActivity {
@@ -96,12 +98,12 @@ interface Metric {
 }
 
 const mockStaffOnShift: StaffOnShift[] = [
-  { id: "s1", name: "John Adeyemi", position: "Kitchen Staff", clockedIn: new Date(Date.now() - 4 * 60 * 60000), status: "active", ordersCompleted: 23, avgServiceTime: "8 min", rating: 4.8 },
-  { id: "s2", name: "Sarah Okonkwo", position: "Waiter", clockedIn: new Date(Date.now() - 3 * 60 * 60000), status: "active", ordersCompleted: 18, avgServiceTime: "3 min", rating: 4.9 },
-  { id: "s3", name: "Michael Bello", position: "Cashier", clockedIn: new Date(Date.now() - 5 * 60 * 60000), status: "on-break", ordersCompleted: 42, avgServiceTime: "2 min", rating: 4.6 },
-  { id: "s4", name: "Amara Eze", position: "Delivery Rider", clockedIn: new Date(Date.now() - 2 * 60 * 60000), status: "active", ordersCompleted: 8, avgServiceTime: "25 min", rating: 4.7 },
-  { id: "s5", name: "David Okoro", position: "Kitchen Staff", clockedIn: new Date(Date.now() - 6 * 60 * 60000), status: "active", ordersCompleted: 31, avgServiceTime: "7 min", rating: 4.5 },
-  { id: "s6", name: "Grace Nwosu", position: "Waiter", clockedIn: new Date(Date.now() - 1 * 60 * 60000), status: "idle", ordersCompleted: 5, avgServiceTime: "4 min", rating: 4.4 },
+  { id: "s1", name: "John Adeyemi", position: "Kitchen Staff", section: "kitchen", clockedIn: new Date(Date.now() - 4 * 60 * 60000), status: "active", ordersCompleted: 23, avgServiceTime: "8 min", rating: 4.8, schedule: { start: 6, end: 14 }, breaks: [{ start: 10, end: 10.25 }], onTaskTime: 85, offTaskTime: 15 },
+  { id: "s2", name: "Sarah Okonkwo", position: "Waiter", section: "floor", clockedIn: new Date(Date.now() - 3 * 60 * 60000), status: "active", ordersCompleted: 18, avgServiceTime: "3 min", rating: 4.9, schedule: { start: 8, end: 16 }, breaks: [{ start: 12, end: 12.5 }], onTaskTime: 92, offTaskTime: 8 },
+  { id: "s3", name: "Michael Bello", position: "Cashier", section: "counter", clockedIn: new Date(Date.now() - 5 * 60 * 60000), status: "on-break", ordersCompleted: 42, avgServiceTime: "2 min", rating: 4.6, schedule: { start: 6, end: 14 }, breaks: [{ start: 10, end: 10.5 }, { start: 13, end: 13.25 }], onTaskTime: 78, offTaskTime: 22 },
+  { id: "s4", name: "Amara Eze", position: "Delivery Rider", section: "delivery", clockedIn: new Date(Date.now() - 2 * 60 * 60000), status: "active", ordersCompleted: 8, avgServiceTime: "25 min", rating: 4.7, schedule: { start: 10, end: 18 }, breaks: [{ start: 14, end: 14.5 }], onTaskTime: 88, offTaskTime: 12 },
+  { id: "s5", name: "David Okoro", position: "Kitchen Staff", section: "kitchen", clockedIn: new Date(Date.now() - 6 * 60 * 60000), status: "active", ordersCompleted: 31, avgServiceTime: "7 min", rating: 4.5, schedule: { start: 6, end: 14 }, breaks: [{ start: 9, end: 9.25 }], onTaskTime: 90, offTaskTime: 10 },
+  { id: "s6", name: "Grace Nwosu", position: "Waiter", section: "floor", clockedIn: new Date(Date.now() - 1 * 60 * 60000), status: "idle", ordersCompleted: 5, avgServiceTime: "4 min", rating: 4.4, schedule: { start: 12, end: 20 }, breaks: [], onTaskTime: 70, offTaskTime: 30 },
 ];
 
 const mockStaffActivities: Record<string, StaffActivity[]> = {
@@ -144,53 +146,19 @@ const mockMetrics: Metric[] = [
   { id: "m1", name: "Total Revenue", value: "₦124,700", change: 12, changeLabel: "vs yesterday", category: "Sales", icon: DollarSign, trend: "up" },
   { id: "m2", name: "Average Order Value", value: "₦2,969", change: 5, changeLabel: "vs yesterday", category: "Sales", icon: ShoppingCart, trend: "up" },
   { id: "m3", name: "Orders Today", value: "42", change: 8, changeLabel: "vs yesterday", category: "Sales", icon: ShoppingCart, trend: "up" },
-  { id: "m4", name: "Revenue per Hour", value: "₦15,587", change: -3, changeLabel: "vs yesterday", category: "Sales", icon: Clock, trend: "down" },
-  { id: "m5", name: "Peak Hour Revenue", value: "₦28,400", change: 15, changeLabel: "12 PM - 1 PM", category: "Sales", icon: TrendingUp, trend: "up" },
-  { id: "m6", name: "Dine-in Revenue", value: "₦62,350", change: 10, changeLabel: "50% of total", category: "Sales", icon: Users, trend: "up" },
-  { id: "m7", name: "Takeaway Revenue", value: "₦31,175", change: 8, changeLabel: "25% of total", category: "Sales", icon: Package, trend: "up" },
-  { id: "m8", name: "Delivery Revenue", value: "₦31,175", change: 20, changeLabel: "25% of total", category: "Sales", icon: Bike, trend: "up" },
   { id: "m9", name: "Avg Prep Time", value: "8.5 min", change: -12, changeLabel: "vs target 10 min", category: "Efficiency", icon: Clock, trend: "up" },
   { id: "m10", name: "Avg Wait Time", value: "12 min", change: 5, changeLabel: "vs yesterday", category: "Efficiency", icon: Clock, trend: "down" },
-  { id: "m11", name: "Orders per Hour", value: "5.25", change: 3, changeLabel: "vs yesterday", category: "Efficiency", icon: Zap, trend: "up" },
-  { id: "m12", name: "Table Turnover", value: "2.3x", change: 8, changeLabel: "vs yesterday", category: "Efficiency", icon: Activity, trend: "up" },
-  { id: "m13", name: "Kitchen Utilization", value: "78%", change: 5, changeLabel: "capacity", category: "Efficiency", icon: ChefHat, trend: "neutral" },
-  { id: "m14", name: "Order Accuracy", value: "98.5%", change: 1, changeLabel: "vs yesterday", category: "Efficiency", icon: Target, trend: "up" },
-  { id: "m15", name: "First-Time Right", value: "95%", change: 2, changeLabel: "no remakes", category: "Efficiency", icon: CheckCircle, trend: "up" },
-  { id: "m16", name: "Delayed Orders", value: "3", change: -25, changeLabel: "vs yesterday", category: "Efficiency", icon: AlertTriangle, trend: "up" },
   { id: "m17", name: "Staff on Shift", value: "6", change: 0, changeLabel: "of 8 scheduled", category: "Staff", icon: Users, trend: "neutral" },
-  { id: "m18", name: "Labor Cost %", value: "28%", change: -2, changeLabel: "vs target 30%", category: "Staff", icon: DollarSign, trend: "up" },
-  { id: "m19", name: "Orders per Staff", value: "7", change: 10, changeLabel: "productivity", category: "Staff", icon: Activity, trend: "up" },
-  { id: "m20", name: "Avg Staff Rating", value: "4.65", change: 0.1, changeLabel: "customer feedback", category: "Staff", icon: Star, trend: "up" },
-  { id: "m21", name: "Break Compliance", value: "100%", change: 0, changeLabel: "all breaks taken", category: "Staff", icon: Clock, trend: "neutral" },
-  { id: "m22", name: "Overtime Hours", value: "2.5h", change: -50, changeLabel: "vs yesterday", category: "Staff", icon: Clock, trend: "up" },
   { id: "m23", name: "Customer Satisfaction", value: "4.7/5", change: 3, changeLabel: "vs last week", category: "Customer", icon: Star, trend: "up" },
-  { id: "m24", name: "Repeat Customers", value: "35%", change: 5, changeLabel: "of orders", category: "Customer", icon: Users, trend: "up" },
-  { id: "m25", name: "New Customers", value: "12", change: 20, changeLabel: "first-time orders", category: "Customer", icon: Users, trend: "up" },
-  { id: "m26", name: "Complaints", value: "1", change: -67, changeLabel: "vs yesterday", category: "Customer", icon: AlertTriangle, trend: "up" },
-  { id: "m27", name: "Avg Service Rating", value: "4.8", change: 2, changeLabel: "waiter feedback", category: "Customer", icon: Star, trend: "up" },
-  { id: "m28", name: "Food Quality Rating", value: "4.6", change: 1, changeLabel: "food feedback", category: "Customer", icon: Star, trend: "up" },
   { id: "m29", name: "Low Stock Items", value: "3", change: 50, changeLabel: "need reorder", category: "Inventory", icon: Package, trend: "down" },
-  { id: "m30", name: "Waste Today", value: "₦2,400", change: -15, changeLabel: "vs yesterday", category: "Inventory", icon: AlertTriangle, trend: "up" },
-  { id: "m31", name: "Food Cost %", value: "32%", change: -1, changeLabel: "vs target 35%", category: "Inventory", icon: PieChart, trend: "up" },
-  { id: "m32", name: "Stock Value", value: "₦485,000", change: 0, changeLabel: "current", category: "Inventory", icon: Package, trend: "neutral" },
-  { id: "m33", name: "Delivery Orders", value: "8", change: 15, changeLabel: "vs yesterday", category: "Delivery", icon: Bike, trend: "up" },
-  { id: "m34", name: "Avg Delivery Time", value: "28 min", change: -8, changeLabel: "vs target 35 min", category: "Delivery", icon: Clock, trend: "up" },
-  { id: "m35", name: "On-Time Delivery", value: "92%", change: 5, changeLabel: "vs yesterday", category: "Delivery", icon: Target, trend: "up" },
-  { id: "m36", name: "Delivery Rating", value: "4.5", change: 3, changeLabel: "rider feedback", category: "Delivery", icon: Star, trend: "up" },
-  { id: "m37", name: "Predicted Revenue", value: "₦185,000", change: 0, changeLabel: "end of day", category: "Predictions", icon: TrendingUp, trend: "up" },
-  { id: "m38", name: "Peak Hour Forecast", value: "7-8 PM", change: 0, changeLabel: "expect 12 orders", category: "Predictions", icon: Clock, trend: "neutral" },
-  { id: "m39", name: "Staff Needed", value: "+2", change: 0, changeLabel: "for dinner rush", category: "Predictions", icon: Users, trend: "neutral" },
-  { id: "m40", name: "Reorder Alert", value: "Tomatoes", change: 0, changeLabel: "order by 3 PM", category: "Predictions", icon: AlertTriangle, trend: "down" },
-  { id: "m41", name: "Weather Impact", value: "+15%", change: 0, changeLabel: "rain = more delivery", category: "Predictions", icon: Activity, trend: "up" },
-  { id: "m42", name: "Demand Trend", value: "Rising", change: 8, changeLabel: "next 2 hours", category: "Predictions", icon: TrendingUp, trend: "up" },
 ];
 
 const ManagersPage = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("overview");
   const [selectedStaff, setSelectedStaff] = useState<StaffOnShift | null>(null);
-  const [showStaffModal, setShowStaffModal] = useState(false);
   const [insightCategory, setInsightCategory] = useState("all");
+  const [showActivityLog, setShowActivityLog] = useState(false);
 
   const formatDuration = (date: Date) => {
     const hours = Math.floor((Date.now() - date.getTime()) / (60 * 60000));
@@ -264,9 +232,28 @@ const ManagersPage = () => {
     return trend === "up" ? "text-green-600" : "text-red-600";
   };
 
+  const getSectionIcon = (section: string) => {
+    switch (section) {
+      case "kitchen": return ChefHat;
+      case "floor": return Utensils;
+      case "counter": return ShoppingCart;
+      case "delivery": return Bike;
+      default: return Users;
+    }
+  };
+
+  const getSectionName = (section: string) => {
+    switch (section) {
+      case "kitchen": return "Kitchen";
+      case "floor": return "Floor Service";
+      case "counter": return "Counter";
+      case "delivery": return "Delivery";
+      default: return section;
+    }
+  };
+
   const handleStaffClick = (staff: StaffOnShift) => {
     setSelectedStaff(staff);
-    setShowStaffModal(true);
   };
 
   const metricCategories = ["all", ...new Set(mockMetrics.map(m => m.category))];
@@ -274,32 +261,92 @@ const ManagersPage = () => {
     ? mockMetrics 
     : mockMetrics.filter(m => m.category === insightCategory);
 
-  return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="bg-card border-b border-border px-4 py-4">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => navigate("/dashboard")}
-            className="rounded-xl"
-          >
-            <ArrowLeft className="w-5 h-5 text-foreground" />
-          </Button>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
-              <Shield className="w-5 h-5 text-foreground" />
-            </div>
-            <div>
-              <h1 className="text-xl font-semibold text-foreground">Manager Dashboard</h1>
-              <p className="text-sm text-muted-foreground">Operations overview and insights</p>
-            </div>
+  // Group staff by section
+  const staffBySection = mockStaffOnShift.reduce((acc, staff) => {
+    if (!acc[staff.section]) acc[staff.section] = [];
+    acc[staff.section].push(staff);
+    return acc;
+  }, {} as Record<string, StaffOnShift[]>);
+
+  const currentHour = new Date().getHours();
+
+  // Time Coverage Component
+  const TimeCoverageBar = ({ staff }: { staff: StaffOnShift }) => {
+    const hours = Array.from({ length: 24 }, (_, i) => i);
+    
+    return (
+      <div className="mt-3">
+        <div className="flex items-center gap-1 text-[10px] text-muted-foreground mb-1">
+          <span>6AM</span>
+          <span className="flex-1" />
+          <span>12PM</span>
+          <span className="flex-1" />
+          <span>6PM</span>
+          <span className="flex-1" />
+          <span>12AM</span>
+        </div>
+        <div className="flex h-6 rounded-lg overflow-hidden border border-border">
+          {hours.map((hour) => {
+            const isScheduled = hour >= staff.schedule.start && hour < staff.schedule.end;
+            const isBreak = staff.breaks.some(b => hour >= b.start && hour < b.end);
+            const isCurrent = hour === currentHour;
+            
+            let bgColor = "bg-muted/30";
+            if (isScheduled) bgColor = "bg-status-success/70";
+            if (isBreak) bgColor = "bg-status-warning/70";
+            
+            return (
+              <div 
+                key={hour} 
+                className={`flex-1 ${bgColor} ${isCurrent ? "ring-2 ring-primary ring-inset" : ""}`}
+                title={`${hour}:00 - ${isBreak ? "Break" : isScheduled ? "Working" : "Off"}`}
+              />
+            );
+          })}
+        </div>
+        <div className="flex items-center gap-4 mt-2 text-xs">
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded bg-status-success/70" />
+            <span className="text-muted-foreground">On Task ({staff.onTaskTime}%)</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded bg-status-warning/70" />
+            <span className="text-muted-foreground">Break/Off ({staff.offTaskTime}%)</span>
           </div>
         </div>
       </div>
+    );
+  };
 
-      <div className="p-4 lg:p-6 space-y-6">
+  return (
+    <div className="min-h-screen bg-background flex flex-col">
+      {/* Header */}
+      <div className="bg-card border-b border-border px-4 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate("/dashboard")}
+              className="rounded-xl"
+            >
+              <ArrowLeft className="w-5 h-5 text-foreground" />
+            </Button>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
+                <Shield className="w-5 h-5 text-foreground" />
+              </div>
+              <div>
+                <h1 className="text-xl font-semibold text-foreground">Manager Dashboard</h1>
+                <p className="text-sm text-muted-foreground">Operations overview and insights</p>
+              </div>
+            </div>
+          </div>
+          <ActivityLogButton onClick={() => setShowActivityLog(true)} />
+        </div>
+      </div>
+
+      <div className="flex-1 p-4 lg:p-6 space-y-6 overflow-auto">
         {/* Quick Stats Row */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-card border border-border rounded-2xl p-5">
@@ -409,54 +456,74 @@ const ManagersPage = () => {
             </div>
           </TabsContent>
 
-          {/* Staff Tab */}
+          {/* Staff Tab - Grouped by Section */}
           <TabsContent value="staff" className="mt-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {mockStaffOnShift.map((staff) => (
-                <div
-                  key={staff.id}
-                  onClick={() => handleStaffClick(staff)}
-                  className="bg-card border border-border rounded-2xl p-5 cursor-pointer hover:shadow-lg transition-all"
-                >
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-xl bg-secondary flex items-center justify-center">
-                        <span className="text-lg font-semibold text-foreground">
-                          {staff.name.split(' ').map(n => n[0]).join('')}
-                        </span>
+            <div className="space-y-8">
+              {Object.entries(staffBySection).map(([section, staffList]) => {
+                const SectionIcon = getSectionIcon(section);
+                return (
+                  <div key={section}>
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center">
+                        <SectionIcon className="w-4 h-4 text-foreground" />
                       </div>
-                      <div>
-                        <p className="font-semibold text-foreground">{staff.name}</p>
-                        <p className="text-sm text-muted-foreground">{staff.position}</p>
-                      </div>
+                      <h3 className="text-lg font-semibold text-foreground">{getSectionName(section)}</h3>
+                      <Badge variant="outline" className="rounded-lg">{staffList.length} staff</Badge>
                     </div>
-                    <Badge className={`${getStatusColor(staff.status)} rounded-lg`}>
-                      {staff.status}
-                    </Badge>
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                      {staffList.map((staff) => (
+                        <div
+                          key={staff.id}
+                          onClick={() => handleStaffClick(staff)}
+                          className={`bg-card border-2 rounded-2xl p-5 cursor-pointer transition-all ${
+                            selectedStaff?.id === staff.id 
+                              ? "border-primary ring-2 ring-primary/10" 
+                              : "border-border hover:border-primary/30 hover:shadow-lg"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between mb-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-12 h-12 rounded-xl bg-secondary flex items-center justify-center">
+                                <span className="text-lg font-semibold text-foreground">
+                                  {staff.name.split(' ').map(n => n[0]).join('')}
+                                </span>
+                              </div>
+                              <div>
+                                <p className="font-semibold text-foreground">{staff.name}</p>
+                                <p className="text-sm text-muted-foreground">{staff.position}</p>
+                              </div>
+                            </div>
+                            <Badge className={`${getStatusColor(staff.status)} rounded-lg`}>
+                              {staff.status}
+                            </Badge>
+                          </div>
+                          <div className="grid grid-cols-3 gap-3 pt-4 border-t border-border">
+                            <div className="text-center">
+                              <p className="text-lg font-semibold text-foreground">{staff.ordersCompleted}</p>
+                              <p className="text-xs text-muted-foreground">Orders</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-lg font-semibold text-foreground">{staff.avgServiceTime}</p>
+                              <p className="text-xs text-muted-foreground">Avg Time</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-lg font-semibold text-foreground flex items-center justify-center gap-1">
+                                <Star className="w-3 h-3 text-foreground" />
+                                {staff.rating}
+                              </p>
+                              <p className="text-xs text-muted-foreground">Rating</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 mt-4 text-sm text-muted-foreground">
+                            <Clock className="w-4 h-4 text-foreground" />
+                            <span>On shift for {formatDuration(staff.clockedIn)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-3 pt-4 border-t border-border">
-                    <div className="text-center">
-                      <p className="text-lg font-semibold text-foreground">{staff.ordersCompleted}</p>
-                      <p className="text-xs text-muted-foreground">Orders</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-lg font-semibold text-foreground">{staff.avgServiceTime}</p>
-                      <p className="text-xs text-muted-foreground">Avg Time</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-lg font-semibold text-foreground flex items-center justify-center gap-1">
-                        <Star className="w-3 h-3 text-foreground" />
-                        {staff.rating}
-                      </p>
-                      <p className="text-xs text-muted-foreground">Rating</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 mt-4 text-sm text-muted-foreground">
-                    <Clock className="w-4 h-4 text-foreground" />
-                    <span>On shift for {formatDuration(staff.clockedIn)}</span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </TabsContent>
 
@@ -561,27 +628,33 @@ const ManagersPage = () => {
         </Tabs>
       </div>
 
-      {/* Staff Activity Modal */}
-      <Dialog open={showStaffModal} onOpenChange={setShowStaffModal}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-xl bg-secondary flex items-center justify-center">
-                <span className="text-lg font-semibold text-foreground">
-                  {selectedStaff?.name.split(' ').map(n => n[0]).join('')}
-                </span>
+      {/* Staff Details Bottom Container */}
+      {selectedStaff && (
+        <div className="border-t border-border bg-card shadow-lg animate-in slide-in-from-bottom duration-300">
+          <div className="p-4 lg:p-6">
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center">
+                  <span className="text-xl font-semibold text-foreground">
+                    {selectedStaff.name.split(' ').map(n => n[0]).join('')}
+                  </span>
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-foreground">{selectedStaff.name}</h3>
+                  <p className="text-sm text-muted-foreground">{selectedStaff.position} • {getSectionName(selectedStaff.section)}</p>
+                </div>
+                <Badge className={`${getStatusColor(selectedStaff.status)} rounded-lg ml-2`}>
+                  {selectedStaff.status}
+                </Badge>
               </div>
-              <div>
-                <p className="font-semibold">{selectedStaff?.name}</p>
-                <p className="text-sm text-muted-foreground font-normal">{selectedStaff?.position}</p>
-              </div>
-            </DialogTitle>
-          </DialogHeader>
-          
-          {selectedStaff && (
-            <div className="space-y-6 py-4">
+              <Button variant="ghost" size="icon" onClick={() => setSelectedStaff(null)} className="rounded-lg">
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Stats */}
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-3 gap-3">
                 <div className="bg-secondary/50 rounded-xl p-4 text-center">
                   <p className="text-2xl font-bold text-foreground">{selectedStaff.ordersCompleted}</p>
                   <p className="text-xs text-muted-foreground">Orders</p>
@@ -599,36 +672,51 @@ const ManagersPage = () => {
                 </div>
               </div>
 
-              {/* Activity Log */}
-              <div>
-                <h4 className="font-semibold text-foreground mb-3">Recent Activity</h4>
-                <ScrollArea className="h-[200px]">
-                  <div className="space-y-3">
-                    {(mockStaffActivities[selectedStaff.id] || []).map((activity) => (
-                      <div key={activity.id} className="bg-secondary/30 rounded-xl p-3">
-                        <p className="text-sm font-medium text-foreground">{activity.action}</p>
-                        {activity.details && (
-                          <p className="text-xs text-muted-foreground mt-1">{activity.details}</p>
-                        )}
-                        <p className="text-xs text-muted-foreground mt-2">{formatTime(activity.time)}</p>
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
-              </div>
-
-              {/* Shift Info */}
-              <div className="flex items-center justify-between p-4 bg-secondary/30 rounded-xl">
-                <div className="flex items-center gap-2">
-                  <Clock className="w-5 h-5 text-foreground" />
-                  <span className="text-sm text-muted-foreground">On shift for</span>
-                </div>
-                <span className="font-semibold text-foreground">{formatDuration(selectedStaff.clockedIn)}</span>
+              {/* Time Coverage Diagram */}
+              <div className="lg:col-span-2">
+                <h4 className="font-semibold text-foreground mb-2">Today's Coverage</h4>
+                <TimeCoverageBar staff={selectedStaff} />
               </div>
             </div>
-          )}
-        </DialogContent>
-      </Dialog>
+
+            {/* Activity Log */}
+            <div className="mt-6">
+              <h4 className="font-semibold text-foreground mb-3">Recent Activity</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                {(mockStaffActivities[selectedStaff.id] || []).slice(0, 4).map((activity) => (
+                  <div key={activity.id} className="bg-secondary/30 rounded-xl p-3">
+                    <p className="text-sm font-medium text-foreground">{activity.action}</p>
+                    {activity.details && (
+                      <p className="text-xs text-muted-foreground mt-1 truncate">{activity.details}</p>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-2">{formatTime(activity.time)}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Shift Info */}
+            <div className="flex items-center justify-between mt-4 p-4 bg-secondary/30 rounded-xl">
+              <div className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-foreground" />
+                <span className="text-sm text-muted-foreground">On shift for</span>
+                <span className="font-semibold text-foreground">{formatDuration(selectedStaff.clockedIn)}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Scheduled:</span>
+                <span className="font-medium text-foreground">{selectedStaff.schedule.start}:00 - {selectedStaff.schedule.end}:00</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Activity Log */}
+      <ActivityLog 
+        open={showActivityLog} 
+        onClose={() => setShowActivityLog(false)} 
+        pageName="Managers Dashboard" 
+      />
     </div>
   );
 };

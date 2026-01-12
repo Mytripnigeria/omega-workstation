@@ -162,7 +162,7 @@ const Dashboard = () => {
         </div>
       </header>
 
-      <main className="px-4 sm:px-6 lg:px-8 py-6 max-w-7xl mx-auto">
+      <main className="px-4 sm:px-6 lg:px-8 py-6">
         {/* Welcome & Clock In */}
         <section className="mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
@@ -221,28 +221,6 @@ const Dashboard = () => {
               </Button>
             </div>
           )}
-        </section>
-
-        {/* Stats */}
-        <section className="mb-8">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="bg-card rounded-2xl border border-border p-5">
-              <p className="text-2xl sm:text-3xl font-bold text-foreground">₦124,700</p>
-              <p className="text-sm text-muted-foreground mt-1">Today's Sales</p>
-            </div>
-            <div className="bg-card rounded-2xl border border-border p-5">
-              <p className="text-2xl sm:text-3xl font-bold text-foreground">42</p>
-              <p className="text-sm text-muted-foreground mt-1">Orders</p>
-            </div>
-            <div className="bg-card rounded-2xl border border-border p-5">
-              <p className="text-2xl sm:text-3xl font-bold text-foreground">8</p>
-              <p className="text-sm text-muted-foreground mt-1">Active Tables</p>
-            </div>
-            <div className="bg-card rounded-2xl border border-border p-5">
-              <p className="text-2xl sm:text-3xl font-bold text-foreground">5</p>
-              <p className="text-sm text-muted-foreground mt-1">Deliveries</p>
-            </div>
-          </div>
         </section>
 
         {/* Services */}
