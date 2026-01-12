@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Globe, Smartphone, Bell, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useContinuousBeep } from "@/hooks/useBeepSound";
 
 interface OrderNotification {
   id: string;
@@ -20,26 +21,29 @@ interface OrderNotificationPopupProps {
 }
 
 const OrderNotificationPopup = ({ notification, onDismiss, onViewOrder }: OrderNotificationPopupProps) => {
+  const { startBeeping, stopBeeping } = useContinuousBeep();
+
   useEffect(() => {
     if (notification) {
-      // Play notification sound
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const playTone = (frequency: number, startTime: number, duration: number) => {
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-        oscillator.frequency.value = frequency;
-        oscillator.type = "sine";
-        gainNode.gain.value = 0.4;
-        oscillator.start(audioContext.currentTime + startTime);
-        oscillator.stop(audioContext.currentTime + startTime + duration);
-      };
-      playTone(880, 0, 0.15);
-      playTone(1100, 0.2, 0.15);
-      playTone(880, 0.4, 0.15);
+      startBeeping();
+    } else {
+      stopBeeping();
     }
-  }, [notification]);
+    
+    return () => {
+      stopBeeping();
+    };
+  }, [notification, startBeeping, stopBeeping]);
+
+  const handleDismiss = () => {
+    stopBeeping();
+    onDismiss();
+  };
+
+  const handleViewOrder = () => {
+    stopBeeping();
+    onViewOrder();
+  };
 
   if (!notification) return null;
 
@@ -75,7 +79,7 @@ const OrderNotificationPopup = ({ notification, onDismiss, onViewOrder }: OrderN
 
   return (
     <div className="fixed top-4 right-4 z-[100] animate-in slide-in-from-top-2 duration-300">
-      <div className="bg-card border border-border rounded-2xl shadow-lg p-5 w-80">
+      <div className="bg-card border border-border rounded-2xl shadow-lg p-5 w-80 animate-pulse">
         {/* Header */}
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
@@ -89,7 +93,7 @@ const OrderNotificationPopup = ({ notification, onDismiss, onViewOrder }: OrderN
               </Badge>
             </div>
           </div>
-          <Button variant="ghost" size="icon" onClick={onDismiss} className="rounded-lg h-8 w-8">
+          <Button variant="ghost" size="icon" onClick={handleDismiss} className="rounded-lg h-8 w-8">
             <X className="w-4 h-4" />
           </Button>
         </div>
@@ -107,10 +111,10 @@ const OrderNotificationPopup = ({ notification, onDismiss, onViewOrder }: OrderN
 
         {/* Actions */}
         <div className="flex gap-2">
-          <Button variant="outline" className="flex-1 rounded-xl" onClick={onDismiss}>
+          <Button variant="outline" className="flex-1 rounded-xl" onClick={handleDismiss}>
             Dismiss
           </Button>
-          <Button className="flex-1 rounded-xl" onClick={onViewOrder}>
+          <Button className="flex-1 rounded-xl" onClick={handleViewOrder}>
             View Order
           </Button>
         </div>

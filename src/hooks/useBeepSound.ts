@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useRef, useEffect } from "react";
 
 export const useBeepSound = () => {
   const playBeep = useCallback(() => {
@@ -18,4 +18,54 @@ export const useBeepSound = () => {
   }, []);
 
   return playBeep;
+};
+
+export const useContinuousBeep = () => {
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+
+  const playNotificationTone = useCallback(() => {
+    if (!audioContextRef.current) {
+      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    const ctx = audioContextRef.current;
+    
+    const playTone = (frequency: number, startTime: number, duration: number) => {
+      const oscillator = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+      oscillator.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      oscillator.frequency.value = frequency;
+      oscillator.type = "sine";
+      gainNode.gain.value = 0.4;
+      oscillator.start(ctx.currentTime + startTime);
+      oscillator.stop(ctx.currentTime + startTime + duration);
+    };
+    
+    playTone(880, 0, 0.15);
+    playTone(1100, 0.2, 0.15);
+    playTone(880, 0.4, 0.15);
+  }, []);
+
+  const startBeeping = useCallback(() => {
+    // Play immediately
+    playNotificationTone();
+    // Then repeat every 3 seconds
+    intervalRef.current = setInterval(playNotificationTone, 3000);
+  }, [playNotificationTone]);
+
+  const stopBeeping = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      stopBeeping();
+    };
+  }, [stopBeeping]);
+
+  return { startBeeping, stopBeeping };
 };
