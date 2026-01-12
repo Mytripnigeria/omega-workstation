@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { ClipboardCheck, CheckCircle2, Circle, Clock } from "lucide-react";
+import { ClipboardCheck, CheckCircle2, Clock, ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import PageHeader from "@/components/PageHeader";
+import { useNavigate } from "react-router-dom";
 
 interface ChecklistItem {
   id: string;
@@ -54,6 +54,7 @@ const mockChecklist: ChecklistCategory[] = [
 ];
 
 const ChecklistPage = () => {
+  const navigate = useNavigate();
   const [checklist, setChecklist] = useState<ChecklistCategory[]>(mockChecklist);
   const [currentShift] = useState("Morning Shift - Kitchen Staff");
 
@@ -75,11 +76,11 @@ const ChecklistPage = () => {
   const getPriorityColor = (priority: ChecklistItem["priority"]) => {
     switch (priority) {
       case "high":
-        return "text-destructive";
+        return "text-destructive border-destructive/30";
       case "medium":
-        return "text-status-warning";
+        return "text-status-warning border-status-warning/30";
       case "low":
-        return "text-muted-foreground";
+        return "text-muted-foreground border-muted";
     }
   };
 
@@ -91,81 +92,98 @@ const ChecklistPage = () => {
   const progressPercent = Math.round((completedItems / totalItems) * 100);
 
   return (
-    <div className="min-h-screen bg-background p-3 sm:p-4 lg:p-6">
-      <PageHeader
-        title="Shift Checklist"
-        icon={ClipboardCheck}
-        iconColor="text-category-lavender"
-        badge={currentShift}
-      />
-
-      {/* Progress Overview */}
-      <div className="bg-card border border-border rounded-xl p-4 sm:p-6 mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold text-foreground">Today's Progress</h3>
-          <span className="text-sm text-muted-foreground">
-            {completedItems}/{totalItems} completed
-          </span>
-        </div>
-        <Progress value={progressPercent} className="h-3 mb-2" />
-        <p className="text-sm text-muted-foreground">{progressPercent}% complete</p>
-      </div>
-
-      {/* Checklist Categories */}
-      <div className="space-y-6">
-        {checklist.map((category) => {
-          const categoryCompleted = category.items.filter((i) => i.completed).length;
-          const categoryTotal = category.items.length;
-
-          return (
-            <div key={category.id} className="bg-card border border-border rounded-xl overflow-hidden">
-              <div className="bg-secondary/50 p-4 flex items-center justify-between">
-                <h4 className="font-semibold text-foreground">{category.name}</h4>
-                <Badge variant="outline">
-                  {categoryCompleted}/{categoryTotal}
-                </Badge>
-              </div>
-              <div className="divide-y divide-border">
-                {category.items.map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => toggleItem(category.id, item.id)}
-                    className="w-full p-4 flex items-center gap-3 hover:bg-secondary/20 transition-colors text-left"
-                  >
-                    <div
-                      className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
-                        item.completed
-                          ? "bg-status-success border-status-success"
-                          : "border-muted-foreground"
-                      }`}
-                    >
-                      {item.completed && <CheckCircle2 className="w-4 h-4 text-white" />}
-                    </div>
-                    <div className="flex-1">
-                      <p
-                        className={`font-medium ${
-                          item.completed ? "line-through text-muted-foreground" : "text-foreground"
-                        }`}
-                      >
-                        {item.task}
-                      </p>
-                      {item.time && (
-                        <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-                          <Clock className="w-3 h-3" />
-                          Completed at {item.time}
-                        </p>
-                      )}
-                    </div>
-                    <Badge variant="outline" className={getPriorityColor(item.priority)}>
-                      {item.priority}
-                    </Badge>
-                  </button>
-                ))}
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="bg-card border-b border-border sticky top-0 z-50">
+        <div className="px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-muted rounded-xl transition-colors">
+                <ArrowLeft className="w-5 h-5 text-foreground" />
+              </button>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
+                  <ClipboardCheck className="w-5 h-5 text-foreground" />
+                </div>
+                <div>
+                  <h1 className="text-lg font-bold text-foreground">Shift Checklist</h1>
+                  <p className="text-xs text-muted-foreground">{currentShift}</p>
+                </div>
               </div>
             </div>
-          );
-        })}
-      </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="px-4 sm:px-6 lg:px-8 py-6 max-w-3xl mx-auto">
+        {/* Progress Overview */}
+        <div className="bg-card border border-border rounded-2xl p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-foreground">Today's Progress</h3>
+            <span className="text-sm text-muted-foreground">
+              {completedItems}/{totalItems} completed
+            </span>
+          </div>
+          <Progress value={progressPercent} className="h-3 mb-2" />
+          <p className="text-sm text-muted-foreground">{progressPercent}% complete</p>
+        </div>
+
+        {/* Checklist Categories */}
+        <div className="space-y-6">
+          {checklist.map((category) => {
+            const categoryCompleted = category.items.filter((i) => i.completed).length;
+            const categoryTotal = category.items.length;
+
+            return (
+              <div key={category.id} className="bg-card border border-border rounded-2xl overflow-hidden">
+                <div className="bg-secondary/50 px-5 py-4 flex items-center justify-between">
+                  <h4 className="font-semibold text-foreground">{category.name}</h4>
+                  <Badge variant="outline">
+                    {categoryCompleted}/{categoryTotal}
+                  </Badge>
+                </div>
+                <div className="divide-y divide-border">
+                  {category.items.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => toggleItem(category.id, item.id)}
+                      className="w-full p-4 flex items-center gap-4 hover:bg-secondary/20 transition-colors text-left"
+                    >
+                      <div
+                        className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors flex-shrink-0 ${
+                          item.completed
+                            ? "bg-status-success border-status-success"
+                            : "border-muted-foreground"
+                        }`}
+                      >
+                        {item.completed && <CheckCircle2 className="w-4 h-4 text-white" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p
+                          className={`font-medium ${
+                            item.completed ? "line-through text-muted-foreground" : "text-foreground"
+                          }`}
+                        >
+                          {item.task}
+                        </p>
+                        {item.time && (
+                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                            <Clock className="w-3 h-3 text-foreground" />
+                            Completed at {item.time}
+                          </p>
+                        )}
+                      </div>
+                      <Badge variant="outline" className={`text-xs ${getPriorityColor(item.priority)}`}>
+                        {item.priority}
+                      </Badge>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </main>
     </div>
   );
 };

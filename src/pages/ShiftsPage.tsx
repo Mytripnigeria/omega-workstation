@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, User, ArrowRightLeft } from "lucide-react";
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, User, ArrowRightLeft, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -15,9 +15,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import PageHeader from "@/components/PageHeader";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import ToastNotification from "@/components/ToastNotification";
+import { useNavigate } from "react-router-dom";
 
 interface Shift {
   id: string;
@@ -67,6 +67,7 @@ const mockTeamMembers: TeamMember[] = [
 ];
 
 const ShiftsPage = () => {
+  const navigate = useNavigate();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [shifts] = useState<Shift[]>(generateShifts());
   const [selectedShift, setSelectedShift] = useState<Shift | null>(null);
@@ -116,15 +117,15 @@ const ShiftsPage = () => {
   const getPositionColor = (position: string) => {
     switch (position) {
       case "Kitchen Staff":
-        return "bg-category-lavender";
+        return "bg-primary/10 text-primary";
       case "Waiter":
-        return "bg-category-pink";
+        return "bg-status-info/10 text-status-info";
       case "Cashier":
-        return "bg-category-mint";
+        return "bg-status-success/10 text-status-success";
       case "Delivery Rider":
-        return "bg-category-peach";
+        return "bg-status-warning/10 text-status-warning";
       default:
-        return "bg-secondary";
+        return "bg-secondary text-foreground";
     }
   };
 
@@ -147,166 +148,182 @@ const ShiftsPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background p-3 sm:p-4 lg:p-6">
-      <PageHeader
-        title="My Shifts"
-        icon={CalendarIcon}
-        iconColor="text-category-sky"
-      />
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="bg-card border-b border-border sticky top-0 z-50">
+        <div className="px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center gap-4">
+            <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-muted rounded-xl transition-colors">
+              <ArrowLeft className="w-5 h-5 text-foreground" />
+            </button>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
+                <CalendarIcon className="w-5 h-5 text-foreground" />
+              </div>
+              <div>
+                <h1 className="text-lg font-bold text-foreground">My Shifts</h1>
+                <p className="text-xs text-muted-foreground">View your schedule</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
 
-      {/* Month Navigation */}
-      <div className="flex items-center justify-between mb-6">
-        <Button variant="outline" size="icon" onClick={() => navigateMonth(-1)}>
-          <ChevronLeft className="w-4 h-4" />
-        </Button>
-        <h2 className="text-xl font-semibold text-foreground">
-          {currentDate.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
-        </h2>
-        <Button variant="outline" size="icon" onClick={() => navigateMonth(1)}>
-          <ChevronRight className="w-4 h-4" />
-        </Button>
-      </div>
+      <main className="px-4 sm:px-6 lg:px-8 py-6 max-w-7xl mx-auto">
+        {/* Month Navigation */}
+        <div className="flex items-center justify-between mb-6">
+          <Button variant="outline" size="icon" onClick={() => navigateMonth(-1)} className="rounded-xl">
+            <ChevronLeft className="w-4 h-4 text-foreground" />
+          </Button>
+          <h2 className="text-xl font-semibold text-foreground">
+            {currentDate.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+          </h2>
+          <Button variant="outline" size="icon" onClick={() => navigateMonth(1)} className="rounded-xl">
+            <ChevronRight className="w-4 h-4 text-foreground" />
+          </Button>
+        </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Calendar Grid */}
-        <div className="lg:col-span-2">
-          <div className="bg-card border border-border rounded-xl overflow-hidden">
-            {/* Week Days Header */}
-            <div className="grid grid-cols-7 bg-secondary/50">
-              {weekDays.map((day) => (
-                <div key={day} className="p-2 sm:p-3 text-center text-sm font-medium text-muted-foreground">
-                  {day}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Calendar Grid */}
+          <div className="lg:col-span-2">
+            <div className="bg-card border border-border rounded-2xl overflow-hidden">
+              {/* Week Days Header */}
+              <div className="grid grid-cols-7 bg-secondary/50">
+                {weekDays.map((day) => (
+                  <div key={day} className="p-3 text-center text-sm font-medium text-muted-foreground">
+                    {day}
+                  </div>
+                ))}
+              </div>
+
+              {/* Days Grid */}
+              <div className="grid grid-cols-7">
+                {days.map((date, idx) => {
+                  const shift = getShiftForDate(date);
+                  const isToday =
+                    date &&
+                    date.getDate() === new Date().getDate() &&
+                    date.getMonth() === new Date().getMonth() &&
+                    date.getFullYear() === new Date().getFullYear();
+                  const isSelected = selectedShift && shift?.id === selectedShift.id;
+
+                  return (
+                    <button
+                      key={idx}
+                      disabled={!date}
+                      onClick={() => shift && setSelectedShift(shift)}
+                      className={`min-h-[90px] p-2 border-t border-r border-border text-left transition-colors ${
+                        date ? "hover:bg-secondary/20" : "bg-muted/20"
+                      } ${isToday ? "bg-primary/5" : ""} ${isSelected ? "ring-2 ring-primary ring-inset" : ""}`}
+                    >
+                      {date && (
+                        <>
+                          <span
+                            className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm ${
+                              isToday ? "bg-primary text-primary-foreground font-bold" : "text-foreground"
+                            }`}
+                          >
+                            {date.getDate()}
+                          </span>
+                          {shift && (
+                            <div className={`mt-1 p-1.5 rounded-lg text-xs ${getPositionColor(shift.position)}`}>
+                              <p className="font-medium truncate">{shift.position}</p>
+                              <p className="opacity-70 hidden sm:block">
+                                {shift.startTime} - {shift.endTime}
+                              </p>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Legend */}
+            <div className="flex flex-wrap gap-3 mt-4">
+              {["Kitchen Staff", "Waiter", "Cashier", "Delivery Rider"].map((position) => (
+                <div key={position} className="flex items-center gap-2">
+                  <div className={`w-3 h-3 rounded ${getPositionColor(position).replace('text-', 'bg-').replace('/10', '')}`} />
+                  <span className="text-sm text-muted-foreground">{position}</span>
                 </div>
               ))}
             </div>
+          </div>
 
-            {/* Days Grid */}
-            <div className="grid grid-cols-7">
-              {days.map((date, idx) => {
-                const shift = getShiftForDate(date);
-                const isToday =
-                  date &&
-                  date.getDate() === new Date().getDate() &&
-                  date.getMonth() === new Date().getMonth() &&
-                  date.getFullYear() === new Date().getFullYear();
-                const isSelected = selectedShift && shift?.id === selectedShift.id;
+          {/* Shift Details Panel */}
+          <div className="lg:col-span-1">
+            <div className="bg-card border border-border rounded-2xl p-5 sticky top-24">
+              <h3 className="text-lg font-semibold text-foreground mb-4">Shift Details</h3>
+              
+              {selectedShift ? (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-12 h-12 rounded-xl ${getPositionColor(selectedShift.position)} flex items-center justify-center`}>
+                      <User className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-foreground">{selectedShift.position}</h4>
+                      <p className="text-sm text-muted-foreground">{selectedShift.location}</p>
+                    </div>
+                  </div>
 
-                return (
-                  <button
-                    key={idx}
-                    disabled={!date}
-                    onClick={() => shift && setSelectedShift(shift)}
-                    className={`min-h-[80px] sm:min-h-[100px] p-2 border-t border-r border-border text-left transition-colors ${
-                      date ? "hover:bg-secondary/20" : "bg-muted/20"
-                    } ${isToday ? "bg-primary/5" : ""} ${isSelected ? "ring-2 ring-primary ring-inset" : ""}`}
+                  <div className="bg-secondary/50 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <CalendarIcon className="w-4 h-4 text-foreground" />
+                      <span className="text-foreground">
+                        {selectedShift.date.toLocaleDateString("en-US", {
+                          weekday: "long",
+                          month: "long",
+                          day: "numeric",
+                        })}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-foreground" />
+                      <span className="text-foreground">
+                        {selectedShift.startTime} - {selectedShift.endTime}
+                      </span>
+                      <Badge variant="outline" className="ml-auto">8 hours</Badge>
+                    </div>
+                  </div>
+
+                  {selectedShift.notes && (
+                    <div className="bg-status-warning/10 border border-status-warning/30 rounded-xl p-3">
+                      <p className="text-sm text-foreground">{selectedShift.notes}</p>
+                    </div>
+                  )}
+
+                  <Button 
+                    variant="outline" 
+                    className="w-full rounded-xl"
+                    onClick={() => setShowSwapModal(true)}
                   >
-                    {date && (
-                      <>
-                        <span
-                          className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm ${
-                            isToday ? "bg-primary text-primary-foreground font-bold" : "text-foreground"
-                          }`}
-                        >
-                          {date.getDate()}
-                        </span>
-                        {shift && (
-                          <div className={`mt-1 p-1 rounded text-xs ${getPositionColor(shift.position)}`}>
-                            <p className="font-medium truncate text-foreground">{shift.position}</p>
-                            <p className="text-muted-foreground hidden sm:block">
-                              {shift.startTime} - {shift.endTime}
-                            </p>
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </button>
-                );
-              })}
+                    <ArrowRightLeft className="w-4 h-4 mr-2 text-foreground" />
+                    Request Shift Swap
+                  </Button>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <CalendarIcon className="w-12 h-12 mx-auto mb-3 opacity-50 text-foreground" />
+                  <p>Select a shift to view details</p>
+                </div>
+              )}
             </div>
           </div>
-
-          {/* Legend */}
-          <div className="flex flex-wrap gap-3 mt-4">
-            {["Kitchen Staff", "Waiter", "Cashier", "Delivery Rider"].map((position) => (
-              <div key={position} className="flex items-center gap-2">
-                <div className={`w-3 h-3 rounded ${getPositionColor(position)}`} />
-                <span className="text-sm text-muted-foreground">{position}</span>
-              </div>
-            ))}
-          </div>
         </div>
-
-        {/* Shift Details Panel */}
-        <div className="lg:col-span-1">
-          <div className="bg-card border border-border rounded-xl p-4 sticky top-4">
-            <h3 className="text-lg font-semibold text-foreground mb-4">Shift Details</h3>
-            
-            {selectedShift ? (
-              <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className={`w-12 h-12 rounded-xl ${getPositionColor(selectedShift.position)} flex items-center justify-center`}>
-                    <User className="w-6 h-6 text-foreground" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-foreground">{selectedShift.position}</h4>
-                    <p className="text-sm text-muted-foreground">{selectedShift.location}</p>
-                  </div>
-                </div>
-
-                <div className="bg-secondary/50 rounded-lg p-4 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <CalendarIcon className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-foreground">
-                      {selectedShift.date.toLocaleDateString("en-US", {
-                        weekday: "long",
-                        month: "long",
-                        day: "numeric",
-                      })}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-foreground">
-                      {selectedShift.startTime} - {selectedShift.endTime}
-                    </span>
-                    <Badge variant="outline" className="ml-auto">8 hours</Badge>
-                  </div>
-                </div>
-
-                {selectedShift.notes && (
-                  <div className="bg-status-warning/10 border border-status-warning/30 rounded-lg p-3">
-                    <p className="text-sm text-foreground">{selectedShift.notes}</p>
-                  </div>
-                )}
-
-                <Button 
-                  variant="outline" 
-                  className="w-full"
-                  onClick={() => setShowSwapModal(true)}
-                >
-                  <ArrowRightLeft className="w-4 h-4 mr-2" />
-                  Request Shift Swap
-                </Button>
-              </div>
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <CalendarIcon className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <p>Select a shift to view details</p>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+      </main>
 
       {/* Swap Modal */}
       <Dialog open={showSwapModal} onOpenChange={setShowSwapModal}>
-        <DialogContent>
+        <DialogContent className="rounded-2xl">
           <DialogHeader>
             <DialogTitle>Request Shift Swap</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             {selectedShift && (
-              <div className="bg-secondary/50 rounded-lg p-3 text-sm">
+              <div className="bg-secondary/50 rounded-xl p-3 text-sm">
                 <p className="font-medium text-foreground">{selectedShift.position}</p>
                 <p className="text-muted-foreground">
                   {selectedShift.date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} • {selectedShift.startTime} - {selectedShift.endTime}
@@ -314,7 +331,7 @@ const ShiftsPage = () => {
               </div>
             )}
             <Select value={selectedTeammate} onValueChange={setSelectedTeammate}>
-              <SelectTrigger>
+              <SelectTrigger className="rounded-xl">
                 <SelectValue placeholder="Select teammate to swap with" />
               </SelectTrigger>
               <SelectContent>
@@ -327,10 +344,10 @@ const ShiftsPage = () => {
             </Select>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" className="flex-1" onClick={() => setShowSwapModal(false)}>
+            <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setShowSwapModal(false)}>
               Cancel
             </Button>
-            <Button className="flex-1 gradient-primary" onClick={handleSwapRequest}>
+            <Button className="flex-1 rounded-xl" onClick={handleSwapRequest}>
               Send Request
             </Button>
           </div>
