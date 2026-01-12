@@ -268,7 +268,7 @@ const KitchenPage = () => {
       </header>
 
       {/* Content */}
-      <main className="p-4 sm:p-6">
+      <main className="page-container">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* New Orders */}
           <div>

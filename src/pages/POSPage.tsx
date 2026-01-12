@@ -119,22 +119,57 @@ const categories = [
 ];
 
 const menuItems: MenuItem[] = [
+  // Popular
   { id: "1", name: "Signature Jollof Rice", price: 3500, category: "popular", image: "🍚", description: "Our famous smoky party jollof rice with perfectly seasoned tomato base", variations: [{ name: "Size", required: true, options: [{ id: "s1", name: "Regular", priceModifier: 0 }, { id: "s2", name: "Large", priceModifier: 1000 }] }] },
   { id: "2", name: "Peppered Chicken", price: 2800, category: "popular", image: "🍗", description: "Crispy fried chicken coated in our signature spicy pepper sauce" },
   { id: "3", name: "Suya Platter", price: 4500, category: "popular", image: "🥩", description: "Thinly sliced beef skewers grilled to perfection with suya spice" },
-  { id: "4", name: "Ofada Rice Special", price: 4500, category: "specialties", image: "🍛", description: "Locally grown ofada rice served with spicy ayamase sauce" },
-  { id: "5", name: "Egusi Soup Combo", price: 5500, category: "specialties", image: "🍲", description: "Rich melon seed soup with assorted meat and fish" },
-  { id: "6", name: "Pepper Soup", price: 4000, category: "specialties", image: "🥣", description: "Aromatic spicy soup with catfish or goat meat" },
-  { id: "7", name: "Asun & Plantain", price: 5000, category: "specialties", image: "🥘", description: "Spicy grilled goat meat served with sweet fried plantain" },
-  { id: "8", name: "Small Chops Platter", price: 3500, category: "starters", image: "🍢", description: "Assorted finger foods: spring rolls, samosa, puff puff" },
-  { id: "9", name: "Pepper Snail", price: 3500, category: "starters", image: "🐚", description: "Tender snails cooked in spicy pepper sauce" },
-  { id: "10", name: "Chapman", price: 1500, category: "drinks", image: "🍹", description: "Classic Nigerian cocktail with Fanta, Sprite, grenadine", variations: [{ name: "Size", required: false, options: [{ id: "d1", name: "Regular", priceModifier: 0 }, { id: "d2", name: "Large", priceModifier: 500 }] }] },
-  { id: "11", name: "Zobo", price: 800, category: "drinks", image: "🧃", description: "Refreshing hibiscus drink with ginger and pineapple" },
-  { id: "12", name: "Fried Plantain", price: 800, category: "sides", image: "🍌", description: "Sweet ripe plantains fried to golden perfection" },
-  { id: "13", name: "Moi Moi", price: 600, category: "sides", image: "🫘", description: "Steamed bean pudding with eggs and fish" },
-  { id: "14", name: "Coleslaw", price: 500, category: "sides", image: "🥗", description: "Fresh creamy coleslaw salad" },
-  { id: "15", name: "Chin Chin", price: 1000, category: "desserts", image: "🍪", description: "Crunchy fried dough snacks" },
-  { id: "16", name: "Puff Puff", price: 800, category: "desserts", image: "🧁", description: "Soft fried dough balls dusted with sugar" },
+  { id: "4", name: "Egusi Combo", price: 5500, category: "popular", image: "🍲", description: "Rich melon seed soup with pounded yam" },
+  { id: "5", name: "Fried Rice Special", price: 3800, category: "popular", image: "🍛", description: "Classic fried rice with mixed vegetables and chicken", variations: [{ name: "Size", required: true, options: [{ id: "fr1", name: "Regular", priceModifier: 0 }, { id: "fr2", name: "Large", priceModifier: 1000 }] }] },
+  // New Release
+  { id: "6", name: "Smoky BBQ Ribs", price: 6500, category: "new", image: "🍖", description: "Tender pork ribs glazed with smoky BBQ sauce" },
+  { id: "7", name: "Coconut Fried Rice", price: 4200, category: "new", image: "🥥", description: "Fragrant rice cooked in coconut milk with prawns" },
+  { id: "8", name: "Spicy Grilled Fish", price: 5800, category: "new", image: "🐟", description: "Whole tilapia grilled with our secret spice blend" },
+  // Specialties
+  { id: "9", name: "Ofada Rice Special", price: 4500, category: "specialties", image: "🍛", description: "Locally grown ofada rice served with spicy ayamase sauce" },
+  { id: "10", name: "Egusi Soup Combo", price: 5500, category: "specialties", image: "🍲", description: "Rich melon seed soup with assorted meat and fish" },
+  { id: "11", name: "Pepper Soup", price: 4000, category: "specialties", image: "🥣", description: "Aromatic spicy soup with catfish or goat meat", variations: [{ name: "Protein", required: true, options: [{ id: "ps1", name: "Catfish", priceModifier: 0 }, { id: "ps2", name: "Goat Meat", priceModifier: 500 }] }] },
+  { id: "12", name: "Asun & Plantain", price: 5000, category: "specialties", image: "🥘", description: "Spicy grilled goat meat served with sweet fried plantain" },
+  { id: "13", name: "Banga Soup", price: 5200, category: "specialties", image: "🍲", description: "Palm fruit soup with fresh fish and starch" },
+  { id: "14", name: "Efo Riro", price: 4800, category: "specialties", image: "🥬", description: "Spinach stew with assorted meat and stockfish" },
+  // Starters
+  { id: "15", name: "Small Chops Platter", price: 3500, category: "starters", image: "🍢", description: "Assorted finger foods: spring rolls, samosa, puff puff" },
+  { id: "16", name: "Pepper Snail", price: 3500, category: "starters", image: "🐚", description: "Tender snails cooked in spicy pepper sauce" },
+  { id: "17", name: "Gizdodo", price: 2800, category: "starters", image: "🍗", description: "Fried gizzard with sweet plantain cubes" },
+  { id: "18", name: "Chicken Wings", price: 3200, category: "starters", image: "🍗", description: "Crispy fried wings with spicy sauce", variations: [{ name: "Spice Level", required: false, options: [{ id: "cw1", name: "Mild", priceModifier: 0 }, { id: "cw2", name: "Hot", priceModifier: 0 }, { id: "cw3", name: "Extra Hot", priceModifier: 200 }] }] },
+  { id: "19", name: "Yam Fries", price: 1500, category: "starters", image: "🍟", description: "Crispy yam strips with pepper dip" },
+  // Mains
+  { id: "20", name: "Pounded Yam & Soup", price: 4500, category: "mains", image: "🍚", description: "Fresh pounded yam with choice of soup", variations: [{ name: "Soup", required: true, options: [{ id: "py1", name: "Egusi", priceModifier: 0 }, { id: "py2", name: "Ogbono", priceModifier: 0 }, { id: "py3", name: "Efo Riro", priceModifier: 200 }] }] },
+  { id: "21", name: "Amala & Ewedu", price: 4000, category: "mains", image: "🍛", description: "Yam flour meal with ewedu and gbegiri" },
+  { id: "22", name: "Semo & Okra Soup", price: 3800, category: "mains", image: "🍚", description: "Semolina swallow with fresh okra soup" },
+  { id: "23", name: "Jollof Spaghetti", price: 2800, category: "mains", image: "🍝", description: "Nigerian-style pasta in tomato sauce" },
+  { id: "24", name: "Beans & Plantain", price: 2500, category: "mains", image: "🫘", description: "Honey beans porridge with fried plantain" },
+  // Sides
+  { id: "25", name: "Fried Plantain", price: 800, category: "sides", image: "🍌", description: "Sweet ripe plantains fried to golden perfection" },
+  { id: "26", name: "Moi Moi", price: 600, category: "sides", image: "🫘", description: "Steamed bean pudding with eggs and fish" },
+  { id: "27", name: "Coleslaw", price: 500, category: "sides", image: "🥗", description: "Fresh creamy coleslaw salad" },
+  { id: "28", name: "Jollof Rice (Side)", price: 1200, category: "sides", image: "🍚", description: "Small portion of jollof rice" },
+  { id: "29", name: "Steamed Vegetables", price: 800, category: "sides", image: "🥦", description: "Mixed vegetables lightly seasoned" },
+  { id: "30", name: "Extra Protein", price: 1500, category: "sides", image: "🥩", description: "Additional meat or fish", variations: [{ name: "Type", required: true, options: [{ id: "ep1", name: "Chicken", priceModifier: 0 }, { id: "ep2", name: "Beef", priceModifier: 300 }, { id: "ep3", name: "Fish", priceModifier: 500 }] }] },
+  // Drinks
+  { id: "31", name: "Chapman", price: 1500, category: "drinks", image: "🍹", description: "Classic Nigerian cocktail with Fanta, Sprite, grenadine", variations: [{ name: "Size", required: false, options: [{ id: "d1", name: "Regular", priceModifier: 0 }, { id: "d2", name: "Large", priceModifier: 500 }] }] },
+  { id: "32", name: "Zobo", price: 800, category: "drinks", image: "🧃", description: "Refreshing hibiscus drink with ginger and pineapple" },
+  { id: "33", name: "Palm Wine", price: 1200, category: "drinks", image: "🥛", description: "Fresh natural palm wine" },
+  { id: "34", name: "Kunu", price: 700, category: "drinks", image: "🥤", description: "Traditional millet drink" },
+  { id: "35", name: "Fresh Juice", price: 1000, category: "drinks", image: "🍊", description: "Orange, pineapple or watermelon", variations: [{ name: "Flavor", required: true, options: [{ id: "fj1", name: "Orange", priceModifier: 0 }, { id: "fj2", name: "Pineapple", priceModifier: 0 }, { id: "fj3", name: "Watermelon", priceModifier: 200 }] }] },
+  { id: "36", name: "Bottled Water", price: 300, category: "drinks", image: "💧", description: "500ml still water" },
+  { id: "37", name: "Soft Drinks", price: 500, category: "drinks", image: "🥤", description: "Coke, Fanta, Sprite, or Pepsi" },
+  { id: "38", name: "Malt Drink", price: 600, category: "drinks", image: "🍺", description: "Malta Guinness or Amstel Malta" },
+  // Desserts
+  { id: "39", name: "Chin Chin", price: 1000, category: "desserts", image: "🍪", description: "Crunchy fried dough snacks" },
+  { id: "40", name: "Puff Puff", price: 800, category: "desserts", image: "🧁", description: "Soft fried dough balls dusted with sugar" },
+  { id: "41", name: "Coconut Candy", price: 600, category: "desserts", image: "🥥", description: "Sweet coconut treats" },
+  { id: "42", name: "Fruit Salad", price: 1200, category: "desserts", image: "🍓", description: "Fresh seasonal fruits with cream" },
+  { id: "43", name: "Ice Cream", price: 1000, category: "desserts", image: "🍨", description: "Vanilla, chocolate or strawberry", variations: [{ name: "Flavor", required: true, options: [{ id: "ic1", name: "Vanilla", priceModifier: 0 }, { id: "ic2", name: "Chocolate", priceModifier: 0 }, { id: "ic3", name: "Strawberry", priceModifier: 0 }] }] },
 ];
 
 const mockIncomingOrders: IncomingOrder[] = [

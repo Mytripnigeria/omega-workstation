@@ -346,7 +346,7 @@ const ManagersPage = () => {
         </div>
       </div>
 
-      <div className="flex-1 p-4 lg:p-6 space-y-6 overflow-auto">
+      <div className="flex-1 page-container space-y-6 overflow-auto">
         {/* Quick Stats Row */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-card border border-border rounded-2xl p-5">

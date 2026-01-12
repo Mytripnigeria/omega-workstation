@@ -296,7 +296,7 @@ const InstorePage = () => {
         </div>
       </div>
 
-      <div className="p-4 lg:p-6">
+      <div className="page-container">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
           <TabsList className="bg-secondary/50 p-1 rounded-xl flex-wrap">
             <TabsTrigger value="inventory" className="rounded-lg data-[state=active]:bg-card">Inventory</TabsTrigger>

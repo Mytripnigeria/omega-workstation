@@ -150,7 +150,7 @@ const LobbyPage = () => {
         </div>
       </header>
 
-      <main className="px-4 sm:px-6 lg:px-8 py-6 max-w-5xl mx-auto">
+      <main className="page-container max-w-5xl mx-auto">
         {/* Now Serving Banner */}
         <div className="bg-card border border-border rounded-2xl p-6 mb-6">
           <div className="flex items-center gap-4">
