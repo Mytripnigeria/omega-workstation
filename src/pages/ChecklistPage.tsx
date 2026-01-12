@@ -119,7 +119,7 @@ const ChecklistPage = () => {
         </div>
       </header>
 
-      <main className="px-4 sm:px-6 lg:px-8 py-6 max-w-3xl mx-auto">
+      <main className="page-container max-w-3xl mx-auto">
         {/* Progress Overview */}
         <div className="bg-card border border-border rounded-2xl p-6 mb-6">
           <div className="flex items-center justify-between mb-4">

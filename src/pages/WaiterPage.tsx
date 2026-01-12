@@ -164,7 +164,7 @@ const WaiterPage = () => {
         </header>
 
         {/* Tabs */}
-        <div className="p-4 sm:p-6 flex-1 overflow-auto">
+        <div className="page-container flex-1 overflow-auto">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-4">
             <TabsList className="bg-muted h-11 w-full sm:w-auto">
               <TabsTrigger value="ready" className="flex-1 sm:flex-none gap-2 rounded-lg">

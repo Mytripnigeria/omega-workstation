@@ -130,7 +130,7 @@ const ReportsPage = () => {
         </div>
       </header>
 
-      <main className="px-4 sm:px-6 lg:px-8 py-6 max-w-7xl mx-auto">
+      <main className="page-container max-w-7xl mx-auto">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="flex-wrap mb-6 bg-card border border-border rounded-xl p-1">
             <TabsTrigger value="overview" className="rounded-lg">Overview</TabsTrigger>

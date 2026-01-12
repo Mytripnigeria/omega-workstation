@@ -175,7 +175,7 @@ const ShiftsPage = () => {
         </div>
       </header>
 
-      <main className="px-4 sm:px-6 lg:px-8 py-6 max-w-7xl mx-auto">
+      <main className="page-container max-w-7xl mx-auto">
         {/* Month Navigation */}
         <div className="flex items-center justify-between mb-6">
           <Button variant="outline" size="icon" onClick={() => navigateMonth(-1)} className="rounded-xl">

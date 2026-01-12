@@ -176,7 +176,7 @@ const DeliveryPage = () => {
         </div>
       </header>
 
-      <main className="p-4 sm:p-6 max-w-7xl mx-auto">
+      <main className="page-container max-w-7xl mx-auto">
         {/* Stats */}
         <div className="grid grid-cols-3 gap-4 mb-6">
           <div className="bg-card border border-border rounded-2xl p-5 text-center">
