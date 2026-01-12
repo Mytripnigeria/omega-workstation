@@ -218,7 +218,7 @@ const POSPage = () => {
   const virtualAccount = {
     bank: "Wema Bank",
     accountNumber: "8234567890",
-    accountName: "Mr Jollof Foods Ltd",
+    accountName: "Toasty Foods Ltd",
   };
 
   const playBeep = useBeepSound();
@@ -252,9 +252,13 @@ const POSPage = () => {
   }, []);
 
   const filteredItems = menuItems.filter((item) => {
-    const matchesCategory = item.category === selectedCategory;
-    const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && (searchQuery ? matchesSearch : true);
+    const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          item.description?.toLowerCase().includes(searchQuery.toLowerCase());
+    // When searching, show items across all categories; otherwise filter by selected category
+    if (searchQuery.trim()) {
+      return matchesSearch;
+    }
+    return item.category === selectedCategory;
   });
 
   const handleItemClick = (item: MenuItem) => {
