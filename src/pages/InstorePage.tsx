@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Package,
   Search,
@@ -11,6 +12,7 @@ import {
   Check,
   X,
   RotateCcw,
+  ArrowLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,7 +31,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import PageHeader from "@/components/PageHeader";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import ToastNotification from "@/components/ToastNotification";
 
@@ -110,6 +111,7 @@ const mockPendingReturns: PendingReturn[] = [
 const emptyNewItem: NewItem = { name: "", category: "", quantity: "", unit: "", minStock: "", location: "", supplier: "" };
 
 const InstorePage = () => {
+  const navigate = useNavigate();
   const [items, setItems] = useState<InventoryItem[]>(mockItems);
   const [pendingReturns, setPendingReturns] = useState<PendingReturn[]>(mockPendingReturns);
   const [searchQuery, setSearchQuery] = useState("");
@@ -123,7 +125,6 @@ const InstorePage = () => {
   const [wasteReason, setWasteReason] = useState("");
   const [wasteNotes, setWasteNotes] = useState("");
   
-  // Batch add items
   const [newItems, setNewItems] = useState<NewItem[]>([{ ...emptyNewItem }]);
 
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; description: string; action: () => void }>({
@@ -258,203 +259,223 @@ const InstorePage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background p-3 sm:p-4 lg:p-6">
-      <PageHeader
-        title="Instore Inventory"
-        icon={Package}
-        iconColor="text-category-sage"
-        badge={`${filteredItems.length} Items`}
-      />
-
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-4">
-        <TabsList>
-          <TabsTrigger value="inventory">Inventory</TabsTrigger>
-          <TabsTrigger value="returns">
-            Pending Returns
-            {pendingReturns.length > 0 && (
-              <Badge variant="secondary" className="ml-2">{pendingReturns.length}</Badge>
-            )}
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="inventory" className="mt-4">
-          {/* Actions Bar */}
-          <div className="flex flex-wrap gap-2 mb-4">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Search items..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-              />
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <div className="bg-card border-b border-border px-4 py-4">
+        <div className="flex items-center gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigate("/dashboard")}
+            className="rounded-xl"
+          >
+            <ArrowLeft className="w-5 h-5 text-foreground" />
+          </Button>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
+              <Package className="w-5 h-5 text-foreground" />
             </div>
-            <Select value={selectedLocation} onValueChange={setSelectedLocation}>
-              <SelectTrigger className="w-[180px]">
-                <Filter className="w-4 h-4 mr-2" />
-                <SelectValue placeholder="All Locations" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Locations</SelectItem>
-                {instoreLocations.map((loc) => (
-                  <SelectItem key={loc.id} value={loc.id}>
-                    {loc.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div>
+              <h1 className="text-xl font-semibold text-foreground">Instore Inventory</h1>
+              <p className="text-sm text-muted-foreground">{filteredItems.length} items in stock</p>
+            </div>
           </div>
+        </div>
+      </div>
 
-          {/* Action Buttons */}
-          <div className="flex flex-wrap gap-2 mb-6">
-            <Button onClick={() => setShowAddModal(true)} className="gradient-primary">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Items
-            </Button>
-            <Button
-              variant="outline"
-              disabled={selectedItems.length === 0}
-              onClick={() => setShowMoveModal(true)}
-            >
-              <ArrowRight className="w-4 h-4 mr-2" />
-              Move to Outstore
-            </Button>
-            <Button
-              variant="outline"
-              disabled={selectedItems.length === 0}
-              onClick={() => setShowWasteModal(true)}
-            >
-              <Trash2 className="w-4 h-4 mr-2" />
-              Report Waste
-            </Button>
-          </div>
+      <div className="p-4 lg:p-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
+          <TabsList className="bg-secondary/50 p-1 rounded-xl">
+            <TabsTrigger value="inventory" className="rounded-lg data-[state=active]:bg-card">Inventory</TabsTrigger>
+            <TabsTrigger value="returns" className="rounded-lg data-[state=active]:bg-card">
+              Pending Returns
+              {pendingReturns.length > 0 && (
+                <Badge variant="secondary" className="ml-2 rounded-full">{pendingReturns.length}</Badge>
+              )}
+            </TabsTrigger>
+          </TabsList>
 
-          {/* Inventory Table */}
-          <div className="bg-card border border-border rounded-xl overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-secondary/50">
-                  <tr>
-                    <th className="p-3 text-left">
-                      <input
-                        type="checkbox"
-                        checked={selectedItems.length === filteredItems.length && filteredItems.length > 0}
-                        onChange={(e) =>
-                          setSelectedItems(e.target.checked ? filteredItems.map((i) => i.id) : [])
-                        }
-                        className="rounded border-border"
-                      />
-                    </th>
-                    <th className="p-3 text-left text-sm font-medium text-muted-foreground">Item</th>
-                    <th className="p-3 text-left text-sm font-medium text-muted-foreground">Category</th>
-                    <th className="p-3 text-left text-sm font-medium text-muted-foreground">Quantity</th>
-                    <th className="p-3 text-left text-sm font-medium text-muted-foreground">Location</th>
-                    <th className="p-3 text-left text-sm font-medium text-muted-foreground">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredItems.map((item) => (
-                    <tr key={item.id} className="border-t border-border hover:bg-secondary/20">
-                      <td className="p-3">
+          <TabsContent value="inventory" className="mt-6">
+            {/* Search and Filter */}
+            <div className="flex flex-col sm:flex-row gap-3 mb-6">
+              <div className="relative flex-1">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-foreground" />
+                <Input
+                  placeholder="Search items..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-12 h-12 rounded-xl border-border"
+                />
+              </div>
+              <Select value={selectedLocation} onValueChange={setSelectedLocation}>
+                <SelectTrigger className="w-full sm:w-[200px] h-12 rounded-xl">
+                  <Filter className="w-4 h-4 mr-2 text-foreground" />
+                  <SelectValue placeholder="All Locations" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Locations</SelectItem>
+                  {instoreLocations.map((loc) => (
+                    <SelectItem key={loc.id} value={loc.id}>
+                      {loc.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex flex-wrap gap-3 mb-6">
+              <Button onClick={() => setShowAddModal(true)} className="rounded-xl h-11">
+                <Plus className="w-4 h-4 mr-2 text-foreground" />
+                Add Items
+              </Button>
+              <Button
+                variant="outline"
+                disabled={selectedItems.length === 0}
+                onClick={() => setShowMoveModal(true)}
+                className="rounded-xl h-11"
+              >
+                <ArrowRight className="w-4 h-4 mr-2 text-foreground" />
+                Move to Outstore
+              </Button>
+              <Button
+                variant="outline"
+                disabled={selectedItems.length === 0}
+                onClick={() => setShowWasteModal(true)}
+                className="rounded-xl h-11"
+              >
+                <Trash2 className="w-4 h-4 mr-2 text-foreground" />
+                Report Waste
+              </Button>
+            </div>
+
+            {/* Inventory Table */}
+            <div className="bg-card border border-border rounded-2xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-secondary/50">
+                    <tr>
+                      <th className="p-4 text-left">
                         <input
                           type="checkbox"
-                          checked={selectedItems.includes(item.id)}
-                          onChange={() => toggleItemSelection(item.id)}
-                          className="rounded border-border"
+                          checked={selectedItems.length === filteredItems.length && filteredItems.length > 0}
+                          onChange={(e) =>
+                            setSelectedItems(e.target.checked ? filteredItems.map((i) => i.id) : [])
+                          }
+                          className="rounded border-border w-5 h-5"
                         />
-                      </td>
-                      <td className="p-3 font-medium text-foreground">{item.name}</td>
-                      <td className="p-3 text-muted-foreground">{item.category}</td>
-                      <td className="p-3 text-foreground">
-                        {item.quantity} {item.unit}
-                      </td>
-                      <td className="p-3">
-                        <Badge variant="outline" className="flex items-center gap-1 w-fit">
-                          <MapPin className="w-3 h-3" />
-                          {getLocationName(item.location)}
-                        </Badge>
-                      </td>
-                      <td className="p-3">
-                        {isLowStock(item) ? (
-                          <Badge className="bg-status-warning text-foreground flex items-center gap-1 w-fit">
-                            <AlertTriangle className="w-3 h-3" />
-                            Low Stock
-                          </Badge>
-                        ) : (
-                          <Badge className="bg-status-success text-white">OK</Badge>
-                        )}
-                      </td>
+                      </th>
+                      <th className="p-4 text-left text-sm font-medium text-muted-foreground">Item</th>
+                      <th className="p-4 text-left text-sm font-medium text-muted-foreground">Category</th>
+                      <th className="p-4 text-left text-sm font-medium text-muted-foreground">Quantity</th>
+                      <th className="p-4 text-left text-sm font-medium text-muted-foreground">Location</th>
+                      <th className="p-4 text-left text-sm font-medium text-muted-foreground">Status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="returns" className="mt-4">
-          <div className="space-y-4">
-            {pendingReturns.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <RotateCcw className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <p>No pending return requests</p>
-              </div>
-            ) : (
-              pendingReturns.map((returnReq) => (
-                <div key={returnReq.id} className="bg-card border border-border rounded-xl p-4">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <Badge variant="outline">{getLocationName(returnReq.fromLocation)}</Badge>
-                        <ArrowRight className="w-4 h-4 text-muted-foreground" />
-                        <Badge variant="secondary">{getLocationName(returnReq.toLocation)}</Badge>
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        Requested by {returnReq.requestedBy} • {Math.floor((Date.now() - returnReq.requestedAt.getTime()) / 60000)} min ago
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline" onClick={() => handleRejectReturn(returnReq.id)}>
-                        <X className="w-4 h-4" />
-                      </Button>
-                      <Button size="sm" className="gradient-primary" onClick={() => handleApproveReturn(returnReq.id)}>
-                        <Check className="w-4 h-4 mr-1" />
-                        Approve
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="bg-secondary/50 rounded-lg p-3">
-                    <p className="text-sm font-medium text-foreground mb-2">Items:</p>
-                    {returnReq.items.map((item, idx) => (
-                      <p key={idx} className="text-sm text-muted-foreground">
-                        {item.quantity} {item.unit} {item.name}
-                      </p>
+                  </thead>
+                  <tbody>
+                    {filteredItems.map((item) => (
+                      <tr key={item.id} className="border-t border-border hover:bg-secondary/20 transition-colors">
+                        <td className="p-4">
+                          <input
+                            type="checkbox"
+                            checked={selectedItems.includes(item.id)}
+                            onChange={() => toggleItemSelection(item.id)}
+                            className="rounded border-border w-5 h-5"
+                          />
+                        </td>
+                        <td className="p-4 font-medium text-foreground">{item.name}</td>
+                        <td className="p-4 text-muted-foreground">{item.category}</td>
+                        <td className="p-4 text-foreground font-medium">
+                          {item.quantity} {item.unit}
+                        </td>
+                        <td className="p-4">
+                          <Badge variant="outline" className="flex items-center gap-1.5 w-fit rounded-lg">
+                            <MapPin className="w-3 h-3 text-foreground" />
+                            {getLocationName(item.location)}
+                          </Badge>
+                        </td>
+                        <td className="p-4">
+                          {isLowStock(item) ? (
+                            <Badge className="bg-amber-100 text-amber-700 flex items-center gap-1.5 w-fit rounded-lg">
+                              <AlertTriangle className="w-3 h-3" />
+                              Low Stock
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-green-100 text-green-700 rounded-lg">OK</Badge>
+                          )}
+                        </td>
+                      </tr>
                     ))}
-                    <p className="text-sm text-muted-foreground mt-2">
-                      <span className="font-medium">Reason:</span> {returnReq.reason}
-                    </p>
-                  </div>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="returns" className="mt-6">
+            <div className="space-y-4">
+              {pendingReturns.length === 0 ? (
+                <div className="text-center py-16 bg-card border border-border rounded-2xl">
+                  <RotateCcw className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+                  <p className="text-muted-foreground">No pending return requests</p>
                 </div>
-              ))
-            )}
-          </div>
-        </TabsContent>
-      </Tabs>
+              ) : (
+                pendingReturns.map((returnReq) => (
+                  <div key={returnReq.id} className="bg-card border border-border rounded-2xl p-5">
+                    <div className="flex items-start justify-between mb-4">
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Badge variant="outline" className="rounded-lg">{getLocationName(returnReq.fromLocation)}</Badge>
+                          <ArrowRight className="w-4 h-4 text-foreground" />
+                          <Badge variant="secondary" className="rounded-lg">{getLocationName(returnReq.toLocation)}</Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Requested by {returnReq.requestedBy} • {Math.floor((Date.now() - returnReq.requestedAt.getTime()) / 60000)} min ago
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" onClick={() => handleRejectReturn(returnReq.id)} className="rounded-lg">
+                          <X className="w-4 h-4 text-foreground" />
+                        </Button>
+                        <Button size="sm" onClick={() => handleApproveReturn(returnReq.id)} className="rounded-lg">
+                          <Check className="w-4 h-4 mr-1" />
+                          Approve
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="bg-secondary/50 rounded-xl p-4">
+                      <p className="text-sm font-medium text-foreground mb-2">Items:</p>
+                      {returnReq.items.map((item, idx) => (
+                        <p key={idx} className="text-sm text-muted-foreground">
+                          {item.quantity} {item.unit} {item.name}
+                        </p>
+                      ))}
+                      <p className="text-sm text-muted-foreground mt-3">
+                        <span className="font-medium">Reason:</span> {returnReq.reason}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </TabsContent>
+        </Tabs>
+      </div>
 
       {/* Add Items Modal */}
       <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Add New Items (Batch)</DialogTitle>
+            <DialogTitle>Add Inventory Items</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             {newItems.map((item, index) => (
-              <div key={index} className="bg-secondary/30 rounded-lg p-4 space-y-3">
+              <div key={index} className="bg-secondary/30 rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-foreground">Item {index + 1}</span>
                   {newItems.length > 1 && (
-                    <Button size="sm" variant="ghost" onClick={() => handleRemoveItem(index)}>
-                      <X className="w-4 h-4" />
+                    <Button size="sm" variant="ghost" onClick={() => handleRemoveItem(index)} className="rounded-lg">
+                      <X className="w-4 h-4 text-foreground" />
                     </Button>
                   )}
                 </div>
@@ -462,36 +483,53 @@ const InstorePage = () => {
                   placeholder="Item name *" 
                   value={item.name}
                   onChange={(e) => updateNewItem(index, "name", e.target.value)}
+                  className="rounded-xl"
                 />
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-3">
                   <Input 
                     placeholder="Category" 
                     value={item.category}
                     onChange={(e) => updateNewItem(index, "category", e.target.value)}
+                    className="rounded-xl"
                   />
-                  <Input 
-                    placeholder="Min Stock" 
-                    type="number"
-                    value={item.minStock}
-                    onChange={(e) => updateNewItem(index, "minStock", e.target.value)}
-                  />
+                  <Select value={item.supplier} onValueChange={(v) => updateNewItem(index, "supplier", v)}>
+                    <SelectTrigger className="rounded-xl">
+                      <SelectValue placeholder="Supplier" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {suppliers.map((sup) => (
+                        <SelectItem key={sup.id} value={sup.id}>
+                          {sup.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-3">
                   <Input 
                     placeholder="Quantity *" 
                     type="number"
                     value={item.quantity}
                     onChange={(e) => updateNewItem(index, "quantity", e.target.value)}
+                    className="rounded-xl"
                   />
                   <Input 
-                    placeholder="Unit (kg, L, pcs) *"
+                    placeholder="Unit *"
                     value={item.unit}
                     onChange={(e) => updateNewItem(index, "unit", e.target.value)}
+                    className="rounded-xl"
+                  />
+                  <Input 
+                    placeholder="Min Stock"
+                    type="number"
+                    value={item.minStock}
+                    onChange={(e) => updateNewItem(index, "minStock", e.target.value)}
+                    className="rounded-xl"
                   />
                 </div>
                 <Select value={item.location} onValueChange={(v) => updateNewItem(index, "location", v)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select location *" />
+                  <SelectTrigger className="rounded-xl">
+                    <SelectValue placeholder="Storage location *" />
                   </SelectTrigger>
                   <SelectContent>
                     {instoreLocations.map((loc) => (
@@ -501,43 +539,36 @@ const InstorePage = () => {
                     ))}
                   </SelectContent>
                 </Select>
-                <Select value={item.supplier} onValueChange={(v) => updateNewItem(index, "supplier", v)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select supplier" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {suppliers.map((sup) => (
-                      <SelectItem key={sup.id} value={sup.id}>
-                        {sup.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </div>
             ))}
-            <Button variant="outline" className="w-full" onClick={handleAddItem}>
-              <Plus className="w-4 h-4 mr-2" />
+            <Button variant="outline" onClick={handleAddItem} className="w-full rounded-xl">
+              <Plus className="w-4 h-4 mr-2 text-foreground" />
               Add Another Item
             </Button>
           </div>
-          <Button className="w-full gradient-primary" onClick={handleSaveItems}>
-            Save All Items
-          </Button>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <Button variant="outline" onClick={() => setShowAddModal(false)} className="rounded-xl">
+              Cancel
+            </Button>
+            <Button onClick={handleSaveItems} className="rounded-xl">
+              Save Items
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
-      {/* Move Modal */}
+      {/* Move Items Modal */}
       <Dialog open={showMoveModal} onOpenChange={setShowMoveModal}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Move Items to Outstore</DialogTitle>
+            <DialogTitle>Move to Outstore</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <p className="text-muted-foreground text-sm">
-              Moving {selectedItems.length} item(s) to outstore location.
+          <div className="py-4 space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Moving {selectedItems.length} item(s) to outstore
             </p>
             <Select value={moveDestination} onValueChange={setMoveDestination}>
-              <SelectTrigger>
+              <SelectTrigger className="rounded-xl">
                 <SelectValue placeholder="Select destination" />
               </SelectTrigger>
               <SelectContent>
@@ -549,12 +580,11 @@ const InstorePage = () => {
               </SelectContent>
             </Select>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" className="flex-1" onClick={() => setShowMoveModal(false)}>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <Button variant="outline" onClick={() => setShowMoveModal(false)} className="rounded-xl">
               Cancel
             </Button>
-            <Button className="flex-1 gradient-primary" onClick={handleMoveItems}>
-              <ArrowRight className="w-4 h-4 mr-2" />
+            <Button onClick={handleMoveItems} className="rounded-xl">
               Move Items
             </Button>
           </div>
@@ -563,57 +593,61 @@ const InstorePage = () => {
 
       {/* Waste Report Modal */}
       <Dialog open={showWasteModal} onOpenChange={setShowWasteModal}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Report Waste/Damage</DialogTitle>
+            <DialogTitle>Report Waste</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <p className="text-muted-foreground text-sm">
-              Reporting waste for {selectedItems.length} item(s).
+          <div className="py-4 space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Reporting {selectedItems.length} item(s) as waste
             </p>
             <Select value={wasteReason} onValueChange={setWasteReason}>
-              <SelectTrigger>
-                <SelectValue placeholder="Reason" />
+              <SelectTrigger className="rounded-xl">
+                <SelectValue placeholder="Reason for waste *" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="expired">Expired</SelectItem>
-                <SelectItem value="damaged">Damaged</SelectItem>
                 <SelectItem value="spoiled">Spoiled</SelectItem>
+                <SelectItem value="damaged">Damaged</SelectItem>
                 <SelectItem value="contaminated">Contaminated</SelectItem>
                 <SelectItem value="other">Other</SelectItem>
               </SelectContent>
             </Select>
-            <Input 
-              placeholder="Additional notes (optional)"
+            <Input
+              placeholder="Additional notes..."
               value={wasteNotes}
               onChange={(e) => setWasteNotes(e.target.value)}
+              className="rounded-xl"
             />
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" className="flex-1" onClick={() => setShowWasteModal(false)}>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <Button variant="outline" onClick={() => setShowWasteModal(false)} className="rounded-xl">
               Cancel
             </Button>
-            <Button className="flex-1 bg-destructive hover:bg-destructive/90" onClick={handleReportWaste}>
-              <Trash2 className="w-4 h-4 mr-2" />
+            <Button onClick={handleReportWaste} variant="destructive" className="rounded-xl">
               Report Waste
             </Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      <ConfirmDialog 
-        open={confirmDialog.open} 
-        onOpenChange={(open) => setConfirmDialog({ ...confirmDialog, open })} 
-        title={confirmDialog.title} 
-        description={confirmDialog.description} 
-        onConfirm={() => { confirmDialog.action(); setConfirmDialog({ ...confirmDialog, open: false }); }} 
+      <ConfirmDialog
+        open={confirmDialog.open}
+        onOpenChange={(open) => setConfirmDialog({ ...confirmDialog, open })}
+        title={confirmDialog.title}
+        description={confirmDialog.description}
+        onConfirm={() => {
+          confirmDialog.action();
+          setConfirmDialog({ ...confirmDialog, open: false });
+        }}
       />
-      <ToastNotification 
-        open={toast.open} 
-        onClose={() => setToast({ ...toast, open: false })} 
-        type={toast.type} 
-        title={toast.title} 
-        message={toast.message} 
+
+      <ToastNotification
+        open={toast.open}
+        onClose={() => setToast({ ...toast, open: false })}
+        type={toast.type}
+        title={toast.title}
+        message={toast.message}
       />
     </div>
   );
