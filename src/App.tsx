@@ -20,6 +20,7 @@ import ProfilePage from "./pages/ProfilePage";
 import ReportsPage from "./pages/ReportsPage";
 import ManagersPage from "./pages/ManagersPage";
 import ExpensesPage from "./pages/ExpensesPage";
+import PrinterSettingsPage from "./pages/PrinterSettingsPage";
 import PlaceholderPage from "./pages/PlaceholderPage";
 import NotFound from "./pages/NotFound";
 
@@ -49,6 +50,7 @@ const App = () => (
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/managers" element={<ManagersPage />} />
           <Route path="/expenses" element={<ExpensesPage />} />
+          <Route path="/printers" element={<PrinterSettingsPage />} />
           <Route path="/tables" element={<PlaceholderPage />} />
           <Route path="/settings" element={<PlaceholderPage />} />
           <Route path="*" element={<NotFound />} />

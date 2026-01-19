@@ -13,6 +13,7 @@ import {
   X,
   ClipboardList,
   Eye,
+  TrendingUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +37,8 @@ import ToastNotification from "@/components/ToastNotification";
 import ActivityLogButton from "@/components/ActivityLogButton";
 import ActivityLog from "@/components/ActivityLog";
 import ItemDetailsModal from "@/components/ItemDetailsModal";
+import InventoryMovementLog from "@/components/InventoryMovementLog";
+import { DataTable } from "@/components/DataTable";
 
 interface InventoryItem {
   id: string;
@@ -270,8 +273,12 @@ const OutstorePage = () => {
 
       <div className="page-container">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
-          <TabsList className="bg-secondary/50 p-1 rounded-xl">
+          <TabsList className="bg-secondary/50 p-1 rounded-xl flex-wrap">
             <TabsTrigger value="inventory" className="rounded-lg data-[state=active]:bg-card">Inventory</TabsTrigger>
+            <TabsTrigger value="movements" className="rounded-lg data-[state=active]:bg-card">
+              <TrendingUp className="w-4 h-4 mr-1" />
+              Movements
+            </TabsTrigger>
             <TabsTrigger value="usage" className="rounded-lg data-[state=active]:bg-card">Usage Log</TabsTrigger>
           </TabsList>
 
@@ -410,6 +417,10 @@ const OutstorePage = () => {
                 </table>
               </div>
             </div>
+          </TabsContent>
+
+          <TabsContent value="movements" className="mt-6">
+            <InventoryMovementLog />
           </TabsContent>
 
           <TabsContent value="usage" className="mt-6">
