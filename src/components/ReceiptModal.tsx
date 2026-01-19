@@ -49,7 +49,7 @@ const ReceiptModal = ({
     if (!receiptRef.current) return;
     
     const printContent = receiptRef.current.innerHTML;
-    const printWindow = window.open('', '', 'width=300,height=600');
+    const printWindow = window.open('', '_blank', 'width=350,height=700');
     if (!printWindow) return;
     
     printWindow.document.write(`
@@ -58,45 +58,64 @@ const ReceiptModal = ({
         <head>
           <title>Receipt ${orderId}</title>
           <style>
+            @page { 
+              size: 80mm auto; 
+              margin: 0; 
+            }
             * { margin: 0; padding: 0; box-sizing: border-box; }
             body { 
-              font-family: 'Courier New', monospace; 
+              font-family: 'Courier New', Consolas, monospace; 
               font-size: 12px; 
-              padding: 10px;
+              padding: 8mm;
               max-width: 80mm;
               margin: 0 auto;
+              background: white;
+              color: black;
             }
-            .receipt-header { text-align: center; margin-bottom: 15px; }
-            .receipt-header h3 { font-size: 16px; font-weight: bold; }
-            .receipt-header p { font-size: 10px; color: #666; }
-            .separator { border-top: 1px dashed #333; margin: 10px 0; }
-            .order-info { margin-bottom: 10px; }
-            .order-info div { display: flex; justify-content: space-between; margin-bottom: 3px; font-size: 11px; }
-            .items { margin-bottom: 10px; }
-            .item { margin-bottom: 8px; }
+            .receipt-header { text-align: center; margin-bottom: 12px; }
+            .receipt-header h3 { font-size: 18px; font-weight: bold; margin-bottom: 4px; }
+            .receipt-header p { font-size: 10px; color: #555; }
+            .separator { border-top: 1px dashed #333; margin: 8px 0; }
+            .order-info { margin-bottom: 8px; }
+            .order-info div { display: flex; justify-content: space-between; margin-bottom: 2px; font-size: 11px; }
+            .items { margin-bottom: 8px; }
+            .item { margin-bottom: 6px; }
             .item-row { display: flex; justify-content: space-between; }
-            .item-variation { font-size: 10px; color: #666; margin-left: 10px; }
-            .totals { margin-bottom: 10px; }
-            .totals div { display: flex; justify-content: space-between; margin-bottom: 3px; font-size: 11px; }
-            .totals .total-row { font-weight: bold; font-size: 14px; margin-top: 5px; }
-            .discount { color: #22c55e; }
-            .qr-placeholder { text-align: center; margin: 15px 0; }
-            .qr-box { width: 60px; height: 60px; border: 1px solid #333; margin: 0 auto 5px; display: flex; align-items: center; justify-content: center; font-size: 10px; }
-            .footer { text-align: center; font-size: 10px; color: #666; }
+            .item-variation { font-size: 10px; color: #666; margin-left: 12px; }
+            .totals { margin-bottom: 8px; }
+            .totals div { display: flex; justify-content: space-between; margin-bottom: 2px; font-size: 11px; }
+            .totals .total-row { font-weight: bold; font-size: 14px; margin-top: 6px; padding-top: 6px; border-top: 1px solid #333; }
+            .discount { color: #16a34a; }
+            .qr-placeholder { text-align: center; margin: 12px 0; }
+            .qr-box { width: 50px; height: 50px; border: 1px solid #333; margin: 0 auto 4px; display: flex; align-items: center; justify-content: center; font-size: 9px; }
+            .footer { text-align: center; font-size: 10px; color: #555; margin-top: 12px; }
             @media print {
               body { padding: 0; }
+              html, body { 
+                width: 80mm; 
+                height: auto;
+              }
+            }
+            @media screen {
+              body {
+                padding: 20px;
+                max-width: 320px;
+              }
             }
           </style>
         </head>
         <body>
           ${printContent}
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(function() { window.close(); }, 500);
+            };
+          </script>
         </body>
       </html>
     `);
     printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
-    printWindow.close();
   };
 
   return (

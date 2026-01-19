@@ -28,6 +28,8 @@ import {
   Users,
   ArrowLeft,
   Star,
+  Keyboard,
+  HelpCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,6 +60,8 @@ import CountdownTimer from "@/components/CountdownTimer";
 import OrderNotificationPopup from "@/components/OrderNotificationPopup";
 import ActivityLog from "@/components/ActivityLog";
 import ActivityLogButton from "@/components/ActivityLogButton";
+import KeyboardShortcutsModal from "@/components/KeyboardShortcutsModal";
+import StaffFinancePanel from "@/components/StaffFinancePanel";
 import { useBeepSound } from "@/hooks/useBeepSound";
 
 interface Variation {
@@ -220,9 +224,14 @@ const POSPage = () => {
     total: number;
     timestamp: Date;
   } | null>(null);
+  const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
   
   const [orderType, setOrderType] = useState<"dine-in" | "takeaway" | "delivery">("dine-in");
   const [customerName, setCustomerName] = useState("");
+
+  // Mock staff data - in real app would come from auth
+  const currentStaffId = "1";
+  const isManager = true; // Would be determined by role
 
   const virtualAccount = {
     bank: "Wema Bank",
@@ -460,6 +469,13 @@ const POSPage = () => {
         return;
       }
 
+      // Ctrl/Cmd + ? or Ctrl/Cmd + / - Show keyboard shortcuts
+      if ((e.ctrlKey || e.metaKey) && (e.key === '?' || e.key === '/')) {
+        e.preventDefault();
+        setShowKeyboardShortcuts(true);
+        return;
+      }
+
       // Number keys 1-8 for category selection
       if (!e.ctrlKey && !e.metaKey && !e.altKey && /^[1-8]$/.test(e.key)) {
         const categoryIndex = parseInt(e.key) - 1;
@@ -546,7 +562,23 @@ const POSPage = () => {
             </h1>
           </div>
           
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Staff Finance Panel */}
+            {posMode === "counter" && (
+              <StaffFinancePanel currentStaffId={currentStaffId} isManager={isManager} />
+            )}
+            
+            {/* Keyboard Shortcuts Help */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowKeyboardShortcuts(true)}
+              className="rounded-xl hidden sm:flex"
+              title="Keyboard Shortcuts (Ctrl+?)"
+            >
+              <Keyboard className="w-4 h-4" />
+            </Button>
+            
             <ActivityLogButton onClick={() => setShowActivityLog(true)} />
             
             {/* Mode Toggle */}
@@ -1012,6 +1044,12 @@ const POSPage = () => {
         open={showActivityLog} 
         onClose={() => setShowActivityLog(false)} 
         pageName="Counter POS" 
+      />
+      
+      {/* Keyboard Shortcuts Modal */}
+      <KeyboardShortcutsModal 
+        open={showKeyboardShortcuts} 
+        onClose={() => setShowKeyboardShortcuts(false)} 
       />
     </div>
   );
