@@ -186,6 +186,16 @@ const ShiftsPage = () => {
     );
   };
 
+  const getAttendanceForDate = (date: Date | null) => {
+    if (!date) return null;
+    return attendance.find(
+      (a) =>
+        a.date.getDate() === date.getDate() &&
+        a.date.getMonth() === date.getMonth() &&
+        a.date.getFullYear() === date.getFullYear()
+    );
+  };
+
   const navigateMonth = (direction: number) => {
     setCurrentDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + direction, 1));
     setSelectedShift(null);
@@ -432,6 +442,62 @@ const ShiftsPage = () => {
                           <p className="text-sm text-foreground">{selectedShift.notes}</p>
                         </div>
                       )}
+
+                      {/* Attendance Record for this Shift */}
+                      {(() => {
+                        const shiftAttendance = getAttendanceForDate(selectedShift.date);
+                        return (
+                          <div className="bg-secondary/30 rounded-xl p-4 space-y-3">
+                            <h5 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                              <Clock className="w-4 h-4" />
+                              Attendance Log
+                            </h5>
+                            {shiftAttendance ? (
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between text-sm">
+                                  <div className="flex items-center gap-2 text-status-success">
+                                    <LogIn className="w-3.5 h-3.5" />
+                                    <span>Sign In</span>
+                                  </div>
+                                  <span className="font-medium text-foreground">
+                                    {shiftAttendance.signInTime 
+                                      ? formatTimeShort(shiftAttendance.signInTime) 
+                                      : "—"}
+                                  </span>
+                                </div>
+                                <div className="flex items-center justify-between text-sm">
+                                  <div className="flex items-center gap-2 text-status-warning">
+                                    <LogOut className="w-3.5 h-3.5" />
+                                    <span>Sign Out</span>
+                                  </div>
+                                  <span className="font-medium text-foreground">
+                                    {shiftAttendance.signOutTime 
+                                      ? formatTimeShort(shiftAttendance.signOutTime) 
+                                      : "—"}
+                                  </span>
+                                </div>
+                                {shiftAttendance.totalHours !== null && (
+                                  <div className="pt-2 border-t border-border flex items-center justify-between text-sm">
+                                    <span className="text-muted-foreground">Total Hours</span>
+                                    <Badge className="bg-status-success/10 text-status-success">
+                                      {shiftAttendance.totalHours.toFixed(1)}h
+                                    </Badge>
+                                  </div>
+                                )}
+                                {!shiftAttendance.signOutTime && shiftAttendance.signInTime && (
+                                  <Badge className="w-full justify-center bg-status-info/10 text-status-info">
+                                    Currently Working
+                                  </Badge>
+                                )}
+                              </div>
+                            ) : (
+                              <p className="text-sm text-muted-foreground text-center py-2">
+                                No attendance recorded
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       <Button 
                         variant="outline" 
