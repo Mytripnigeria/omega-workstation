@@ -318,6 +318,21 @@ const POSPage = () => {
     setConfirmDialog({
       open: true, title: "Quick Bill", description: "This will complete the order immediately without sending to kitchen. Continue?",
       action: () => {
+        const newOrder: IncomingOrder = {
+          id: `#QB${Date.now().toString().slice(-4)}`,
+          source: "pos",
+          customerName: customerName || "Walk-in",
+          items: cart.map((c) => ({ name: c.name, quantity: c.quantity, price: c.price, variationText: c.variationText })),
+          total: total,
+          time: "Just now",
+          startTime: new Date(),
+          estimatedMinutes: 0,
+          status: "ready",
+          orderType,
+          billType: "quick",
+        };
+        setCurrentReceipt(newOrder);
+        setShowReceiptModal(true);
         setToast({ open: true, type: "success", title: "Order Completed!", message: "Quick bill has been processed" });
         setCart([]);
         setDiscount(0);
@@ -335,7 +350,7 @@ const POSPage = () => {
           id: `#ORD${Date.now().toString().slice(-4)}`,
           source: "pos",
           customerName: customerName || "Walk-in",
-          items: cart.map((c) => ({ name: c.name, quantity: c.quantity, price: c.price })),
+          items: cart.map((c) => ({ name: c.name, quantity: c.quantity, price: c.price, variationText: c.variationText })),
           total: total,
           time: "Just now",
           startTime: new Date(),
@@ -345,6 +360,8 @@ const POSPage = () => {
           billType: "process",
         };
         setIncomingOrders((prev) => [newOrder, ...prev]);
+        setCurrentReceipt(newOrder);
+        setShowReceiptModal(true);
         setToast({ open: true, type: "success", title: "Order Sent!", message: "Order has been sent to the kitchen" });
         setCart([]);
         setDiscount(0);
