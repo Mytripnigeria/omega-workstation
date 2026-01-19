@@ -126,39 +126,66 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="bg-card border-b border-border sticky top-0 z-50">
-        <div className="px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            {/* Left - Logo & Location */}
-            <div className="flex items-center gap-4">
-              <img src={toastyLogo} alt="Toasty" className="w-10 h-10 object-contain" />
-              <div>
-                <h1 className="text-lg font-bold text-foreground">Toasty</h1>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <MapPin className="w-3 h-3" />
+      {/* Enterprise Header */}
+      <header className="bg-card/80 backdrop-blur-xl border-b border-border/50 sticky top-0 z-50">
+        <div className="px-3 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-14 sm:h-16">
+            {/* Left - Logo & Branding */}
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center ring-1 ring-primary/20">
+                  <img src={toastyLogo} alt="Toasty" className="w-6 h-6 sm:w-7 sm:h-7 object-contain" />
+                </div>
+                <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full ring-2 ring-card ${
+                  isOnline ? 'bg-status-success' : 'bg-status-warning'
+                }`} />
+              </div>
+              <div className="hidden xs:block">
+                <h1 className="text-sm sm:text-base font-semibold text-foreground leading-tight">Toasty POS</h1>
+                <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-muted-foreground">
+                  <MapPin className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                   <span>Makurdi Branch</span>
-                  <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                    isOnline ? 'bg-status-success/10 text-status-success' : 'bg-status-warning/10 text-status-warning'
-                  }`}>
-                    {isOnline ? <Wifi className="w-2.5 h-2.5" /> : <WifiOff className="w-2.5 h-2.5" />}
-                    {isOnline ? 'Online' : 'Offline'}
-                  </span>
                 </div>
               </div>
             </div>
 
-            {/* Right - Controls */}
-            <div className="flex items-center gap-3">
-              <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground">
-                <Clock className="w-4 h-4" />
-                <span className="font-medium text-foreground">{formatTime(currentTime)}</span>
+            {/* Center - Status Bar (hidden on mobile) */}
+            <div className="hidden md:flex items-center gap-6">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-secondary/50">
+                <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+                <span className="text-sm font-medium text-foreground tabular-nums">{formatTime(currentTime)}</span>
               </div>
-              <ThemeToggle />
-              <FullscreenToggle />
-              <Button variant="ghost" size="sm" onClick={handleLogout} className="text-muted-foreground">
-                <LogOutIcon className="w-4 h-4" />
-              </Button>
+              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${
+                isOnline ? 'bg-status-success/10' : 'bg-status-warning/10'
+              }`}>
+                {isOnline ? <Wifi className="w-3.5 h-3.5 text-status-success" /> : <WifiOff className="w-3.5 h-3.5 text-status-warning" />}
+                <span className={`text-xs font-medium ${isOnline ? 'text-status-success' : 'text-status-warning'}`}>
+                  {isOnline ? 'Connected' : 'Offline'}
+                </span>
+              </div>
+            </div>
+
+            {/* Right - Controls */}
+            <div className="flex items-center">
+              {/* Mobile Time */}
+              <div className="flex md:hidden items-center mr-2 px-2 py-1 rounded-md bg-secondary/50">
+                <span className="text-xs font-medium text-foreground tabular-nums">{formatTime(currentTime)}</span>
+              </div>
+              
+              {/* Action Buttons */}
+              <div className="flex items-center gap-1 sm:gap-1.5">
+                <ThemeToggle />
+                <FullscreenToggle />
+                <div className="w-px h-5 bg-border mx-1 hidden sm:block" />
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                  onClick={handleLogout} 
+                  className="h-8 w-8 sm:h-9 sm:w-9 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
+                >
+                  <LogOutIcon className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
           </div>
         </div>
