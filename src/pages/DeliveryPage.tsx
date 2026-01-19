@@ -8,6 +8,7 @@ import DeliveryModal from "@/components/DeliveryModal";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import ActivityLogButton from "@/components/ActivityLogButton";
 import ActivityLog from "@/components/ActivityLog";
+import DeliveryNotificationPopup from "@/components/DeliveryNotificationPopup";
 
 interface DeliveryOrder {
   id: string;
@@ -44,11 +45,46 @@ const DeliveryPage = () => {
   const [activeTab, setActiveTab] = useState("new");
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; description: string; action: () => void }>({ open: false, title: "", description: "", action: () => {} });
   const [showActivityLog, setShowActivityLog] = useState(false);
+  const [deliveryNotification, setDeliveryNotification] = useState<{
+    id: string;
+    orderNumber: string;
+    customerName: string;
+    address: string;
+    items: number;
+    total: number;
+    distance: string;
+    timestamp: Date;
+  } | null>(null);
   const [, setTick] = useState(0);
 
   useEffect(() => {
     const interval = setInterval(() => setTick((t) => t + 1), 1000);
     return () => clearInterval(interval);
+  }, []);
+
+  // Simulate incoming delivery notifications
+  useEffect(() => {
+    const simulateDelivery = () => {
+      const orderNum = `#D${Date.now().toString().slice(-4)}`;
+      setDeliveryNotification({
+        id: orderNum,
+        orderNumber: orderNum,
+        customerName: ["Ada Eze", "Chidi Obi", "Amaka Nweke", "Bola Ahmed"][Math.floor(Math.random() * 4)],
+        address: ["42 High Level, Makurdi", "15 Wurukum Road", "8 North Bank", "22 Modern Market"][Math.floor(Math.random() * 4)],
+        items: Math.floor(Math.random() * 5) + 1,
+        total: Math.floor(Math.random() * 8000) + 3000,
+        distance: `${(Math.random() * 3 + 0.5).toFixed(1)} km`,
+        timestamp: new Date(),
+      });
+    };
+
+    const timeout = setTimeout(simulateDelivery, 20000);
+    const interval = setInterval(simulateDelivery, 90000);
+
+    return () => {
+      clearTimeout(timeout);
+      clearInterval(interval);
+    };
   }, []);
 
   const getRemainingSeconds = (order: DeliveryOrder) => {
@@ -258,6 +294,30 @@ const DeliveryPage = () => {
       <DeliveryModal delivery={selectedDelivery} onClose={() => setSelectedDelivery(null)} onUpdateStatus={updateStatus} />
       <ConfirmDialog open={confirmDialog.open} onOpenChange={(open) => setConfirmDialog({ ...confirmDialog, open })} title={confirmDialog.title} description={confirmDialog.description} onConfirm={() => { confirmDialog.action(); setConfirmDialog({ ...confirmDialog, open: false }); }} />
       <ActivityLog open={showActivityLog} onClose={() => setShowActivityLog(false)} pageName="Delivery Rider" />
+      
+      {/* Delivery Notification Popup */}
+      <DeliveryNotificationPopup
+        notification={deliveryNotification}
+        onDismiss={() => setDeliveryNotification(null)}
+        onAccept={() => {
+          if (deliveryNotification) {
+            const newDelivery: DeliveryOrder = {
+              id: deliveryNotification.orderNumber,
+              customerName: deliveryNotification.customerName,
+              phone: "+234 801 234 5678",
+              address: deliveryNotification.address,
+              items: [`${deliveryNotification.items} items`],
+              total: deliveryNotification.total,
+              status: "pending",
+              startTime: new Date(),
+              estimatedMinutes: 20,
+              distance: deliveryNotification.distance,
+            };
+            setDeliveries(prev => [newDelivery, ...prev]);
+            setDeliveryNotification(null);
+          }
+        }}
+      />
     </div>
   );
 };
