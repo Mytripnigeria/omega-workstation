@@ -18,6 +18,7 @@ import {
   Clock,
   ChevronRight,
   MapPin,
+  Printer,
 } from "lucide-react";
 import toastyLogo from "@/assets/toasty-logo.png";
 import { Button } from "@/components/ui/button";
@@ -58,6 +59,7 @@ const services: ServiceItem[] = [
   { title: "Checklist", description: "Shift tasks", icon: ClipboardCheck, route: "/checklist", color: "text-category-lavender" },
   { title: "Shifts", description: "Your schedule", icon: Calendar, route: "/shifts", color: "text-category-sky" },
   { title: "Expenses", description: "Manage costs", icon: BarChart3, route: "/expenses", color: "text-category-peach" },
+  { title: "Printers", description: "Print settings", icon: Printer, route: "/printers", color: "text-category-mint" },
   { title: "Profile", description: "Work profile", icon: User, route: "/profile", color: "text-category-pink" },
   { title: "Reports", description: "Analytics", icon: BarChart3, route: "/reports", color: "text-category-sage" },
   { title: "Managers", description: "Overview", icon: Shield, route: "/managers", color: "text-category-cream" },
