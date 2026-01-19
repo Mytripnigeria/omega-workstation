@@ -37,6 +37,9 @@ import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import ActivityLog from "@/components/ActivityLog";
 import ActivityLogButton from "@/components/ActivityLogButton";
+import SalesCharts from "@/components/SalesCharts";
+import StaffPerformance from "@/components/StaffPerformance";
+import InventoryAlerts from "@/components/InventoryAlerts";
 
 interface StaffOnShift {
   id: string;
@@ -400,11 +403,28 @@ const ManagersPage = () => {
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="bg-secondary/50 p-1 rounded-xl">
             <TabsTrigger value="overview" className="rounded-lg data-[state=active]:bg-card">Overview</TabsTrigger>
+            <TabsTrigger value="sales" className="rounded-lg data-[state=active]:bg-card">Sales</TabsTrigger>
             <TabsTrigger value="staff" className="rounded-lg data-[state=active]:bg-card">Staff ({mockStaffOnShift.length})</TabsTrigger>
+            <TabsTrigger value="performance" className="rounded-lg data-[state=active]:bg-card">Performance</TabsTrigger>
+            <TabsTrigger value="inventory" className="rounded-lg data-[state=active]:bg-card">Inventory</TabsTrigger>
             <TabsTrigger value="tasks" className="rounded-lg data-[state=active]:bg-card">Tasks</TabsTrigger>
             <TabsTrigger value="alerts" className="rounded-lg data-[state=active]:bg-card">Alerts ({mockAlerts.length})</TabsTrigger>
-            <TabsTrigger value="insights" className="rounded-lg data-[state=active]:bg-card">Insights</TabsTrigger>
           </TabsList>
+
+          {/* Sales Tab */}
+          <TabsContent value="sales" className="mt-6">
+            <SalesCharts />
+          </TabsContent>
+
+          {/* Performance Tab */}
+          <TabsContent value="performance" className="mt-6">
+            <StaffPerformance />
+          </TabsContent>
+
+          {/* Inventory Alerts Tab */}
+          <TabsContent value="inventory" className="mt-6">
+            <InventoryAlerts />
+          </TabsContent>
 
           {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-6 mt-6">
@@ -586,45 +606,6 @@ const ManagersPage = () => {
             </div>
           </TabsContent>
 
-          {/* Insights Tab */}
-          <TabsContent value="insights" className="mt-6">
-            {/* Category Filter */}
-            <div className="flex flex-wrap gap-2 mb-6">
-              {metricCategories.map((category) => (
-                <Button
-                  key={category}
-                  variant={insightCategory === category ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setInsightCategory(category)}
-                  className="rounded-xl capitalize"
-                >
-                  {category}
-                </Button>
-              ))}
-            </div>
-
-            {/* Metrics Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {filteredMetrics.map((metric) => (
-                <div key={metric.id} className="bg-card border border-border rounded-2xl p-5">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
-                      <metric.icon className="w-5 h-5 text-foreground" />
-                    </div>
-                    <Badge variant="outline" className="rounded-lg text-xs">
-                      {metric.category}
-                    </Badge>
-                  </div>
-                  <p className="text-sm text-muted-foreground mb-1">{metric.name}</p>
-                  <p className="text-2xl font-bold text-foreground mb-2">{metric.value}</p>
-                  <div className={`flex items-center gap-1 text-sm ${getTrendColor(metric.trend, metric.change)}`}>
-                    {getTrendIcon(metric.trend)}
-                    <span>{Math.abs(metric.change)}% {metric.changeLabel}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </TabsContent>
         </Tabs>
       </div>
 
