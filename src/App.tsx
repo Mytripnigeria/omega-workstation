@@ -19,6 +19,7 @@ import ShiftsPage from "./pages/ShiftsPage";
 import ProfilePage from "./pages/ProfilePage";
 import ReportsPage from "./pages/ReportsPage";
 import ManagersPage from "./pages/ManagersPage";
+import ExpensesPage from "./pages/ExpensesPage";
 import PlaceholderPage from "./pages/PlaceholderPage";
 import NotFound from "./pages/NotFound";
 
@@ -47,6 +48,7 @@ const App = () => (
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/managers" element={<ManagersPage />} />
+          <Route path="/expenses" element={<ExpensesPage />} />
           <Route path="/tables" element={<PlaceholderPage />} />
           <Route path="/settings" element={<PlaceholderPage />} />
           <Route path="*" element={<NotFound />} />
