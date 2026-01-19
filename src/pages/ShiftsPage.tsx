@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, User, ArrowRightLeft, ArrowLeft } from "lucide-react";
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, User, ArrowRightLeft, ArrowLeft, LogIn, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -37,6 +38,15 @@ interface TeamMember {
   position: string;
 }
 
+interface AttendanceRecord {
+  id: string;
+  date: Date;
+  signInTime: Date | null;
+  signOutTime: Date | null;
+  position: string;
+  totalHours: number | null;
+}
+
 const generateShifts = (): Shift[] => {
   const shifts: Shift[] = [];
   const positions = ["Kitchen Staff", "Waiter", "Cashier", "Delivery Rider"];
@@ -68,18 +78,85 @@ const mockTeamMembers: TeamMember[] = [
   { id: "tm5", name: "David Okoro", position: "Kitchen Staff" },
 ];
 
+const mockAttendance: AttendanceRecord[] = [
+  { id: "att1", date: new Date(), signInTime: new Date(new Date().setHours(6, 2, 0)), signOutTime: null, position: "Kitchen Staff", totalHours: null },
+  { id: "att2", date: new Date(Date.now() - 86400000), signInTime: new Date(new Date(Date.now() - 86400000).setHours(6, 5, 0)), signOutTime: new Date(new Date(Date.now() - 86400000).setHours(14, 10, 0)), position: "Kitchen Staff", totalHours: 8.08 },
+  { id: "att3", date: new Date(Date.now() - 2 * 86400000), signInTime: new Date(new Date(Date.now() - 2 * 86400000).setHours(14, 0, 0)), signOutTime: new Date(new Date(Date.now() - 2 * 86400000).setHours(22, 15, 0)), position: "Cashier", totalHours: 8.25 },
+];
+
 const ShiftsPage = () => {
   const navigate = useNavigate();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [shifts] = useState<Shift[]>(generateShifts());
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>(mockAttendance);
   const [selectedShift, setSelectedShift] = useState<Shift | null>(null);
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [selectedTeammate, setSelectedTeammate] = useState("");
+  const [activeTab, setActiveTab] = useState("calendar");
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; description: string; action: () => void }>({
     open: false, title: "", description: "", action: () => {},
   });
   const [toast, setToast] = useState<{ open: boolean; type: "success" | "error" | "warning" | "info"; title: string; message?: string }>({ open: false, type: "success", title: "" });
   const [showActivityLog, setShowActivityLog] = useState(false);
+
+  // Get today's attendance record
+  const todayAttendance = attendance.find(
+    (a) =>
+      a.date.getDate() === new Date().getDate() &&
+      a.date.getMonth() === new Date().getMonth() &&
+      a.date.getFullYear() === new Date().getFullYear()
+  );
+
+  const isClockedIn = todayAttendance && todayAttendance.signInTime && !todayAttendance.signOutTime;
+
+  const handleClockIn = () => {
+    if (todayAttendance) {
+      setToast({ open: true, type: "warning", title: "Already Clocked In", message: "You have already signed in today" });
+      return;
+    }
+    const newRecord: AttendanceRecord = {
+      id: `att-${Date.now()}`,
+      date: new Date(),
+      signInTime: new Date(),
+      signOutTime: null,
+      position: "Kitchen Staff",
+      totalHours: null,
+    };
+    setAttendance([newRecord, ...attendance]);
+    setToast({ open: true, type: "success", title: "Clocked In", message: `Signed in at ${new Date().toLocaleTimeString()}` });
+  };
+
+  const handleClockOut = () => {
+    if (!todayAttendance || !todayAttendance.signInTime) {
+      setToast({ open: true, type: "error", title: "Error", message: "You haven't signed in today" });
+      return;
+    }
+    if (todayAttendance.signOutTime) {
+      setToast({ open: true, type: "warning", title: "Already Clocked Out", message: "You have already signed out today" });
+      return;
+    }
+    setConfirmDialog({
+      open: true,
+      title: "Clock Out",
+      description: "Are you sure you want to sign out for today?",
+      action: () => {
+        const signOut = new Date();
+        const totalHours = (signOut.getTime() - todayAttendance.signInTime!.getTime()) / (1000 * 60 * 60);
+        setAttendance(
+          attendance.map((a) =>
+            a.id === todayAttendance.id
+              ? { ...a, signOutTime: signOut, totalHours: Math.round(totalHours * 100) / 100 }
+              : a
+          )
+        );
+        setToast({ open: true, type: "success", title: "Clocked Out", message: `Signed out at ${signOut.toLocaleTimeString()}` });
+      },
+    });
+  };
+
+  const formatTimeShort = (date: Date) => {
+    return date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+  };
 
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear();
@@ -176,149 +253,257 @@ const ShiftsPage = () => {
       </header>
 
       <main className="page-container max-w-7xl mx-auto">
-        {/* Month Navigation */}
-        <div className="flex items-center justify-between mb-6">
-          <Button variant="outline" size="icon" onClick={() => navigateMonth(-1)} className="rounded-xl">
-            <ChevronLeft className="w-4 h-4 text-foreground" />
-          </Button>
-          <h2 className="text-xl font-semibold text-foreground">
-            {currentDate.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
-          </h2>
-          <Button variant="outline" size="icon" onClick={() => navigateMonth(1)} className="rounded-xl">
-            <ChevronRight className="w-4 h-4 text-foreground" />
-          </Button>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Calendar Grid */}
-          <div className="lg:col-span-2">
-            <div className="bg-card border border-border rounded-2xl overflow-hidden">
-              {/* Week Days Header */}
-              <div className="grid grid-cols-7 bg-secondary/50">
-                {weekDays.map((day) => (
-                  <div key={day} className="p-3 text-center text-sm font-medium text-muted-foreground">
-                    {day}
-                  </div>
-                ))}
+        {/* Today's Clock Status */}
+        <div className="bg-card border border-border rounded-2xl p-4 mb-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                isClockedIn ? "bg-status-success/10" : "bg-secondary"
+              }`}>
+                <Clock className={`w-6 h-6 ${isClockedIn ? "text-status-success" : "text-muted-foreground"}`} />
               </div>
-
-              {/* Days Grid */}
-              <div className="grid grid-cols-7">
-                {days.map((date, idx) => {
-                  const shift = getShiftForDate(date);
-                  const isToday =
-                    date &&
-                    date.getDate() === new Date().getDate() &&
-                    date.getMonth() === new Date().getMonth() &&
-                    date.getFullYear() === new Date().getFullYear();
-                  const isSelected = selectedShift && shift?.id === selectedShift.id;
-
-                  return (
-                    <button
-                      key={idx}
-                      disabled={!date}
-                      onClick={() => shift && setSelectedShift(shift)}
-                      className={`min-h-[90px] p-2 border-t border-r border-border text-left transition-colors ${
-                        date ? "hover:bg-secondary/20" : "bg-muted/20"
-                      } ${isToday ? "bg-primary/5" : ""} ${isSelected ? "ring-2 ring-primary ring-inset" : ""}`}
-                    >
-                      {date && (
-                        <>
-                          <span
-                            className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm ${
-                              isToday ? "bg-primary text-primary-foreground font-bold" : "text-foreground"
-                            }`}
-                          >
-                            {date.getDate()}
-                          </span>
-                          {shift && (
-                            <div className={`mt-1 p-1.5 rounded-lg text-xs ${getPositionColor(shift.position)}`}>
-                              <p className="font-medium truncate">{shift.position}</p>
-                              <p className="opacity-70 hidden sm:block">
-                                {shift.startTime} - {shift.endTime}
-                              </p>
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </button>
-                  );
-                })}
+              <div>
+                <h3 className="font-semibold text-foreground">
+                  {isClockedIn ? "Currently Working" : "Not Clocked In"}
+                </h3>
+                {todayAttendance?.signInTime && (
+                  <p className="text-sm text-muted-foreground">
+                    Signed in at {formatTimeShort(todayAttendance.signInTime)}
+                    {todayAttendance.signOutTime && ` • Out at ${formatTimeShort(todayAttendance.signOutTime)}`}
+                  </p>
+                )}
               </div>
             </div>
-
-            {/* Legend */}
-            <div className="flex flex-wrap gap-3 mt-4">
-              {["Kitchen Staff", "Waiter", "Cashier", "Delivery Rider"].map((position) => (
-                <div key={position} className="flex items-center gap-2">
-                  <div className={`w-3 h-3 rounded ${getPositionColor(position).replace('text-', 'bg-').replace('/10', '')}`} />
-                  <span className="text-sm text-muted-foreground">{position}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Shift Details Panel */}
-          <div className="lg:col-span-1">
-            <div className="bg-card border border-border rounded-2xl p-5 sticky top-24">
-              <h3 className="text-lg font-semibold text-foreground mb-4">Shift Details</h3>
-              
-              {selectedShift ? (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-12 h-12 rounded-xl ${getPositionColor(selectedShift.position)} flex items-center justify-center`}>
-                      <User className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <h4 className="font-semibold text-foreground">{selectedShift.position}</h4>
-                      <p className="text-sm text-muted-foreground">{selectedShift.location}</p>
-                    </div>
-                  </div>
-
-                  <div className="bg-secondary/50 rounded-xl p-4 space-y-3">
-                    <div className="flex items-center gap-2">
-                      <CalendarIcon className="w-4 h-4 text-foreground" />
-                      <span className="text-foreground">
-                        {selectedShift.date.toLocaleDateString("en-US", {
-                          weekday: "long",
-                          month: "long",
-                          day: "numeric",
-                        })}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-foreground" />
-                      <span className="text-foreground">
-                        {selectedShift.startTime} - {selectedShift.endTime}
-                      </span>
-                      <Badge variant="outline" className="ml-auto">8 hours</Badge>
-                    </div>
-                  </div>
-
-                  {selectedShift.notes && (
-                    <div className="bg-status-warning/10 border border-status-warning/30 rounded-xl p-3">
-                      <p className="text-sm text-foreground">{selectedShift.notes}</p>
-                    </div>
-                  )}
-
-                  <Button 
-                    variant="outline" 
-                    className="w-full rounded-xl"
-                    onClick={() => setShowSwapModal(true)}
-                  >
-                    <ArrowRightLeft className="w-4 h-4 mr-2 text-foreground" />
-                    Request Shift Swap
-                  </Button>
-                </div>
+            <div className="flex gap-2 w-full sm:w-auto">
+              {!todayAttendance ? (
+                <Button onClick={handleClockIn} className="rounded-xl flex-1 sm:flex-none">
+                  <LogIn className="w-4 h-4 mr-2" />
+                  Clock In
+                </Button>
+              ) : !todayAttendance.signOutTime ? (
+                <Button onClick={handleClockOut} variant="outline" className="rounded-xl flex-1 sm:flex-none border-status-warning text-status-warning hover:bg-status-warning/10">
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Clock Out
+                </Button>
               ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  <CalendarIcon className="w-12 h-12 mx-auto mb-3 opacity-50 text-foreground" />
-                  <p>Select a shift to view details</p>
-                </div>
+                <Badge className="bg-status-success/10 text-status-success px-4 py-2">
+                  Shift Complete • {todayAttendance.totalHours?.toFixed(1)}h
+                </Badge>
               )}
             </div>
           </div>
         </div>
+
+        {/* Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
+          <TabsList className="bg-secondary/50 p-1 rounded-xl">
+            <TabsTrigger value="calendar" className="rounded-lg data-[state=active]:bg-card">
+              <CalendarIcon className="w-4 h-4 mr-1" />
+              Schedule
+            </TabsTrigger>
+            <TabsTrigger value="attendance" className="rounded-lg data-[state=active]:bg-card">
+              <Clock className="w-4 h-4 mr-1" />
+              Attendance
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="calendar" className="mt-6">
+            {/* Month Navigation */}
+            <div className="flex items-center justify-between mb-6">
+              <Button variant="outline" size="icon" onClick={() => navigateMonth(-1)} className="rounded-xl">
+                <ChevronLeft className="w-4 h-4 text-foreground" />
+              </Button>
+              <h2 className="text-xl font-semibold text-foreground">
+                {currentDate.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+              </h2>
+              <Button variant="outline" size="icon" onClick={() => navigateMonth(1)} className="rounded-xl">
+                <ChevronRight className="w-4 h-4 text-foreground" />
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Calendar Grid */}
+              <div className="lg:col-span-2">
+                <div className="bg-card border border-border rounded-2xl overflow-hidden">
+                  {/* Week Days Header */}
+                  <div className="grid grid-cols-7 bg-secondary/50">
+                    {weekDays.map((day) => (
+                      <div key={day} className="p-3 text-center text-sm font-medium text-muted-foreground">
+                        {day}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Days Grid */}
+                  <div className="grid grid-cols-7">
+                    {days.map((date, idx) => {
+                      const shift = getShiftForDate(date);
+                      const isToday =
+                        date &&
+                        date.getDate() === new Date().getDate() &&
+                        date.getMonth() === new Date().getMonth() &&
+                        date.getFullYear() === new Date().getFullYear();
+                      const isSelected = selectedShift && shift?.id === selectedShift.id;
+
+                      return (
+                        <button
+                          key={idx}
+                          disabled={!date}
+                          onClick={() => shift && setSelectedShift(shift)}
+                          className={`min-h-[90px] p-2 border-t border-r border-border text-left transition-colors ${
+                            date ? "hover:bg-secondary/20" : "bg-muted/20"
+                          } ${isToday ? "bg-primary/5" : ""} ${isSelected ? "ring-2 ring-primary ring-inset" : ""}`}
+                        >
+                          {date && (
+                            <>
+                              <span
+                                className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm ${
+                                  isToday ? "bg-primary text-primary-foreground font-bold" : "text-foreground"
+                                }`}
+                              >
+                                {date.getDate()}
+                              </span>
+                              {shift && (
+                                <div className={`mt-1 p-1.5 rounded-lg text-xs ${getPositionColor(shift.position)}`}>
+                                  <p className="font-medium truncate">{shift.position}</p>
+                                  <p className="opacity-70 hidden sm:block">
+                                    {shift.startTime} - {shift.endTime}
+                                  </p>
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Legend */}
+                <div className="flex flex-wrap gap-3 mt-4">
+                  {["Kitchen Staff", "Waiter", "Cashier", "Delivery Rider"].map((position) => (
+                    <div key={position} className="flex items-center gap-2">
+                      <div className={`w-3 h-3 rounded ${getPositionColor(position).replace('text-', 'bg-').replace('/10', '')}`} />
+                      <span className="text-sm text-muted-foreground">{position}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Shift Details Panel */}
+              <div className="lg:col-span-1">
+                <div className="bg-card border border-border rounded-2xl p-5 sticky top-24">
+                  <h3 className="text-lg font-semibold text-foreground mb-4">Shift Details</h3>
+                  
+                  {selectedShift ? (
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-12 h-12 rounded-xl ${getPositionColor(selectedShift.position)} flex items-center justify-center`}>
+                          <User className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <h4 className="font-semibold text-foreground">{selectedShift.position}</h4>
+                          <p className="text-sm text-muted-foreground">{selectedShift.location}</p>
+                        </div>
+                      </div>
+
+                      <div className="bg-secondary/50 rounded-xl p-4 space-y-3">
+                        <div className="flex items-center gap-2">
+                          <CalendarIcon className="w-4 h-4 text-foreground" />
+                          <span className="text-foreground">
+                            {selectedShift.date.toLocaleDateString("en-US", {
+                              weekday: "long",
+                              month: "long",
+                              day: "numeric",
+                            })}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-foreground" />
+                          <span className="text-foreground">
+                            {selectedShift.startTime} - {selectedShift.endTime}
+                          </span>
+                          <Badge variant="outline" className="ml-auto">8 hours</Badge>
+                        </div>
+                      </div>
+
+                      {selectedShift.notes && (
+                        <div className="bg-status-warning/10 border border-status-warning/30 rounded-xl p-3">
+                          <p className="text-sm text-foreground">{selectedShift.notes}</p>
+                        </div>
+                      )}
+
+                      <Button 
+                        variant="outline" 
+                        className="w-full rounded-xl"
+                        onClick={() => setShowSwapModal(true)}
+                      >
+                        <ArrowRightLeft className="w-4 h-4 mr-2 text-foreground" />
+                        Request Shift Swap
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <CalendarIcon className="w-12 h-12 mx-auto mb-3 opacity-50 text-foreground" />
+                      <p>Select a shift to view details</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="attendance" className="mt-6">
+            <div className="bg-card border border-border rounded-2xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-secondary/50">
+                    <tr>
+                      <th className="p-4 text-left text-sm font-medium text-muted-foreground">Date</th>
+                      <th className="p-4 text-left text-sm font-medium text-muted-foreground">Position</th>
+                      <th className="p-4 text-left text-sm font-medium text-muted-foreground">Sign In</th>
+                      <th className="p-4 text-left text-sm font-medium text-muted-foreground">Sign Out</th>
+                      <th className="p-4 text-left text-sm font-medium text-muted-foreground">Total Hours</th>
+                      <th className="p-4 text-left text-sm font-medium text-muted-foreground">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {attendance.map((record) => (
+                      <tr key={record.id} className="border-t border-border">
+                        <td className="p-4 font-medium text-foreground">
+                          {record.date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                        </td>
+                        <td className="p-4">
+                          <Badge variant="outline" className={`rounded-lg ${getPositionColor(record.position)}`}>
+                            {record.position}
+                          </Badge>
+                        </td>
+                        <td className="p-4 text-foreground">
+                          {record.signInTime ? formatTimeShort(record.signInTime) : "-"}
+                        </td>
+                        <td className="p-4 text-foreground">
+                          {record.signOutTime ? formatTimeShort(record.signOutTime) : "-"}
+                        </td>
+                        <td className="p-4 text-foreground font-medium">
+                          {record.totalHours ? `${record.totalHours.toFixed(1)}h` : "-"}
+                        </td>
+                        <td className="p-4">
+                          {record.signOutTime ? (
+                            <Badge className="bg-status-success/10 text-status-success">Complete</Badge>
+                          ) : record.signInTime ? (
+                            <Badge className="bg-status-warning/10 text-status-warning">In Progress</Badge>
+                          ) : (
+                            <Badge className="bg-muted text-muted-foreground">-</Badge>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </TabsContent>
+        </Tabs>
       </main>
 
       {/* Swap Modal */}

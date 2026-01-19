@@ -57,6 +57,7 @@ const services: ServiceItem[] = [
   { title: "Outstore", description: "Kitchen inventory", icon: Package, route: "/outstore", color: "text-category-coral" },
   { title: "Checklist", description: "Shift tasks", icon: ClipboardCheck, route: "/checklist", color: "text-category-lavender" },
   { title: "Shifts", description: "Your schedule", icon: Calendar, route: "/shifts", color: "text-category-sky" },
+  { title: "Expenses", description: "Manage costs", icon: BarChart3, route: "/expenses", color: "text-category-peach" },
   { title: "Profile", description: "Work profile", icon: User, route: "/profile", color: "text-category-pink" },
   { title: "Reports", description: "Analytics", icon: BarChart3, route: "/reports", color: "text-category-sage" },
   { title: "Managers", description: "Overview", icon: Shield, route: "/managers", color: "text-category-cream" },
@@ -162,85 +163,88 @@ const Dashboard = () => {
       </header>
 
       <main className="page-container">
-        {/* Welcome & Clock In */}
+        {/* Welcome & Clock In Section - Refined Layout */}
         <section className="mb-8">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-            <div>
-              <h2 className="text-2xl font-bold text-foreground">
-                Welcome back, {currentStaff?.name}
-              </h2>
-              <p className="text-muted-foreground text-sm mt-1">
-                {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <Select value={shiftPosition} onValueChange={setShiftPosition}>
-                <SelectTrigger className="w-[160px] h-10 rounded-xl bg-card">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {shiftPositions.map((pos) => (
-                    <SelectItem key={pos} value={pos}>{pos}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button 
-                onClick={handleClockToggle} 
-                className={`h-10 rounded-xl px-5 ${
-                  isClockedIn 
-                    ? "bg-status-success/10 text-status-success border border-status-success/30 hover:bg-status-success/20" 
-                    : ""
-                }`}
-                variant={isClockedIn ? "outline" : "default"}
-              >
-                {isClockedIn ? <LogOutIcon className="w-4 h-4 mr-2" /> : <LogIn className="w-4 h-4 mr-2" />}
-                {isClockedIn ? "Clock Out" : "Clock In"}
-              </Button>
-            </div>
-          </div>
-
-          {/* Clock Status */}
-          {isClockedIn && clockInTime && (
-            <div className="bg-status-success/10 border border-status-success/20 rounded-2xl p-4 flex items-center justify-between flex-wrap gap-3">
-              <div className="flex items-center gap-3">
-                <div className="w-2.5 h-2.5 rounded-full bg-status-success animate-pulse" />
-                <span className="text-sm text-foreground">
-                  Clocked in at <span className="font-semibold">{formatTime(clockInTime)}</span> as {shiftPosition}
-                </span>
+          <div className="bg-card border border-border rounded-2xl p-5 sm:p-6">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
+              {/* Left - Welcome */}
+              <div className="flex-1">
+                <h2 className="text-xl sm:text-2xl font-bold text-foreground">
+                  Welcome back, {currentStaff?.name}
+                </h2>
+                <p className="text-muted-foreground text-sm mt-1">
+                  {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                </p>
               </div>
-              <Button 
-                size="sm" 
-                variant="outline" 
-                onClick={() => setShowKPI(true)} 
-                className="rounded-xl border-status-success/30 text-status-success hover:bg-status-success/10"
-              >
-                View KPI
-                <ChevronRight className="w-4 h-4 ml-1" />
-              </Button>
+
+              {/* Right - Position Selector & Clock Button */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                <Select value={shiftPosition} onValueChange={setShiftPosition}>
+                  <SelectTrigger className="w-full sm:w-[180px] h-11 rounded-xl bg-secondary/50 border-border">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {shiftPositions.map((pos) => (
+                      <SelectItem key={pos} value={pos}>{pos}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button 
+                  onClick={handleClockToggle} 
+                  size="lg"
+                  className={`h-11 rounded-xl px-6 font-medium ${
+                    isClockedIn 
+                      ? "bg-status-success/15 text-status-success border border-status-success/30 hover:bg-status-success/25" 
+                      : "bg-primary text-primary-foreground hover:bg-primary/90"
+                  }`}
+                  variant={isClockedIn ? "outline" : "default"}
+                >
+                  {isClockedIn ? <LogOutIcon className="w-4 h-4 mr-2" /> : <LogIn className="w-4 h-4 mr-2" />}
+                  {isClockedIn ? "Clock Out" : "Clock In"}
+                </Button>
+              </div>
             </div>
-          )}
+
+            {/* Clock Status Banner */}
+            {isClockedIn && clockInTime && (
+              <div className="mt-4 bg-status-success/10 border border-status-success/20 rounded-xl p-4 flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-2.5 h-2.5 rounded-full bg-status-success animate-pulse" />
+                  <span className="text-sm text-foreground">
+                    Clocked in at <span className="font-semibold">{formatTime(clockInTime)}</span> as {shiftPosition}
+                  </span>
+                </div>
+                <Button 
+                  size="sm" 
+                  variant="ghost" 
+                  onClick={() => setShowKPI(true)} 
+                  className="rounded-lg text-status-success hover:bg-status-success/10"
+                >
+                  View KPI
+                  <ChevronRight className="w-4 h-4 ml-1" />
+                </Button>
+              </div>
+            )}
+          </div>
         </section>
 
-        {/* Services */}
+        {/* Services Grid - Improved Responsive Layout */}
         <section>
           <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-4">Services</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 sm:gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
             {services.map((service) => (
               <button
                 key={service.title}
                 onClick={() => navigate(service.route)}
-                className="bg-card rounded-2xl border border-border p-4 sm:p-5 text-left hover:border-primary/30 hover:shadow-lg transition-all duration-200 group flex flex-col items-start gap-3"
+                className="bg-card rounded-2xl border border-border p-4 sm:p-5 text-left hover:border-primary/40 hover:shadow-md hover:shadow-primary/5 transition-all duration-200 group flex flex-col"
               >
-                <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center bg-secondary/80 group-hover:bg-primary/10 transition-colors">
-                  <service.icon className="w-5 h-5 sm:w-6 sm:h-6 text-foreground group-hover:text-primary transition-colors" />
+                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center bg-secondary/60 group-hover:bg-primary/10 transition-colors mb-3">
+                  <service.icon className="w-5 h-5 sm:w-5.5 sm:h-5.5 text-foreground group-hover:text-primary transition-colors" />
                 </div>
-                <div className="space-y-0.5">
-                  <h4 className="font-semibold text-foreground text-sm sm:text-base group-hover:text-primary transition-colors">
-                    {service.title}
-                  </h4>
-                  <p className="text-xs sm:text-sm text-muted-foreground line-clamp-1">{service.description}</p>
-                </div>
+                <h4 className="font-semibold text-foreground text-sm group-hover:text-primary transition-colors">
+                  {service.title}
+                </h4>
+                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{service.description}</p>
               </button>
             ))}
           </div>
