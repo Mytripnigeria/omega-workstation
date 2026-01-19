@@ -19,6 +19,11 @@ import {
   ChevronRight,
   MapPin,
   Printer,
+  Bell,
+  ShoppingCart,
+  AlertTriangle,
+  Settings,
+  Check,
 } from "lucide-react";
 import toastyLogo from "@/assets/toasty-logo.png";
 import { Button } from "@/components/ui/button";
@@ -33,6 +38,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface Staff {
   id: string;
@@ -174,8 +185,117 @@ const Dashboard = () => {
               
               {/* Action Buttons */}
               <div className="flex items-center gap-1 sm:gap-1.5">
+                {/* Notifications */}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="icon"
+                      className="h-8 w-8 sm:h-9 sm:w-9 text-muted-foreground hover:text-foreground rounded-lg relative"
+                    >
+                      <Bell className="w-4 h-4" />
+                      <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full flex items-center justify-center">
+                        5
+                      </span>
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent 
+                    className="w-80 p-0 bg-card border border-border shadow-lg z-50" 
+                    align="end"
+                    sideOffset={8}
+                  >
+                    <div className="p-3 border-b border-border">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-semibold text-foreground text-sm">Notifications</h4>
+                        <Button variant="ghost" size="sm" className="text-xs text-muted-foreground h-7 px-2">
+                          <Check className="w-3 h-3 mr-1" />
+                          Mark all read
+                        </Button>
+                      </div>
+                    </div>
+                    <ScrollArea className="h-[300px]">
+                      <div className="p-2 space-y-1">
+                        {/* Order Notifications */}
+                        <div className="p-3 rounded-lg hover:bg-secondary/50 cursor-pointer transition-colors">
+                          <div className="flex gap-3">
+                            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                              <ShoppingCart className="w-4 h-4 text-primary" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-foreground">New Order #1247</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">3 items • ₦4,500</p>
+                              <p className="text-[10px] text-muted-foreground mt-1">2 min ago</p>
+                            </div>
+                            <span className="w-2 h-2 bg-primary rounded-full flex-shrink-0 mt-1.5" />
+                          </div>
+                        </div>
+                        
+                        <div className="p-3 rounded-lg hover:bg-secondary/50 cursor-pointer transition-colors">
+                          <div className="flex gap-3">
+                            <div className="w-8 h-8 rounded-full bg-status-warning/10 flex items-center justify-center flex-shrink-0">
+                              <AlertTriangle className="w-4 h-4 text-status-warning" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-foreground">Low Stock Alert</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">Chicken Wings - 5 units left</p>
+                              <p className="text-[10px] text-muted-foreground mt-1">15 min ago</p>
+                            </div>
+                            <span className="w-2 h-2 bg-status-warning rounded-full flex-shrink-0 mt-1.5" />
+                          </div>
+                        </div>
+                        
+                        <div className="p-3 rounded-lg hover:bg-secondary/50 cursor-pointer transition-colors">
+                          <div className="flex gap-3">
+                            <div className="w-8 h-8 rounded-full bg-status-success/10 flex items-center justify-center flex-shrink-0">
+                              <ChefHat className="w-4 h-4 text-status-success" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-foreground">Order Ready</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">Order #1245 ready for pickup</p>
+                              <p className="text-[10px] text-muted-foreground mt-1">25 min ago</p>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="p-3 rounded-lg hover:bg-secondary/50 cursor-pointer transition-colors">
+                          <div className="flex gap-3">
+                            <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center flex-shrink-0">
+                              <Settings className="w-4 h-4 text-muted-foreground" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-foreground">System Update</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">New features available</p>
+                              <p className="text-[10px] text-muted-foreground mt-1">1 hour ago</p>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="p-3 rounded-lg hover:bg-secondary/50 cursor-pointer transition-colors">
+                          <div className="flex gap-3">
+                            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                              <ShoppingCart className="w-4 h-4 text-primary" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-foreground">New Order #1246</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">5 items • ₦7,200</p>
+                              <p className="text-[10px] text-muted-foreground mt-1">2 hours ago</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </ScrollArea>
+                    <div className="p-2 border-t border-border">
+                      <Button variant="ghost" className="w-full text-sm text-primary hover:text-primary h-9">
+                        View all notifications
+                      </Button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                
                 <ThemeToggle />
-                <FullscreenToggle />
+                <div className="hidden sm:block">
+                  <FullscreenToggle />
+                </div>
                 <div className="w-px h-5 bg-border mx-1 hidden sm:block" />
                 <Button 
                   variant="ghost" 
