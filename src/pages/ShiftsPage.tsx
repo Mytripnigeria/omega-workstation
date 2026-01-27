@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, User, ArrowRightLeft, ArrowLeft, LogIn, LogOut } from "lucide-react";
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, User, ArrowRightLeft, ArrowLeft, LogIn, LogOut, Pencil } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -98,6 +99,10 @@ const ShiftsPage = () => {
   });
   const [toast, setToast] = useState<{ open: boolean; type: "success" | "error" | "warning" | "info"; title: string; message?: string }>({ open: false, type: "success", title: "" });
   const [showActivityLog, setShowActivityLog] = useState(false);
+  const [showEditAttendanceModal, setShowEditAttendanceModal] = useState(false);
+  const [editingAttendance, setEditingAttendance] = useState<AttendanceRecord | null>(null);
+  const [editSignIn, setEditSignIn] = useState("");
+  const [editSignOut, setEditSignOut] = useState("");
 
   // Get today's attendance record
   const todayAttendance = attendance.find(
@@ -235,6 +240,51 @@ const ShiftsPage = () => {
         setToast({ open: true, type: "success", title: "Swap Requested", message: "Your shift swap request has been sent" });
       }
     });
+  };
+
+  const openEditAttendanceModal = (record: AttendanceRecord) => {
+    setEditingAttendance(record);
+    setEditSignIn(record.signInTime ? formatTimeInput(record.signInTime) : "");
+    setEditSignOut(record.signOutTime ? formatTimeInput(record.signOutTime) : "");
+    setShowEditAttendanceModal(true);
+  };
+
+  const formatTimeInput = (date: Date) => {
+    return date.toTimeString().slice(0, 5); // Returns "HH:MM"
+  };
+
+  const handleSaveAttendance = () => {
+    if (!editingAttendance) return;
+    
+    const signInDate = editSignIn ? new Date(editingAttendance.date) : null;
+    const signOutDate = editSignOut ? new Date(editingAttendance.date) : null;
+    
+    if (signInDate && editSignIn) {
+      const [hours, minutes] = editSignIn.split(":").map(Number);
+      signInDate.setHours(hours, minutes, 0);
+    }
+    
+    if (signOutDate && editSignOut) {
+      const [hours, minutes] = editSignOut.split(":").map(Number);
+      signOutDate.setHours(hours, minutes, 0);
+    }
+    
+    let totalHours: number | null = null;
+    if (signInDate && signOutDate) {
+      totalHours = Math.round(((signOutDate.getTime() - signInDate.getTime()) / (1000 * 60 * 60)) * 100) / 100;
+    }
+    
+    setAttendance(
+      attendance.map((a) =>
+        a.id === editingAttendance.id
+          ? { ...a, signInTime: signInDate, signOutTime: signOutDate, totalHours }
+          : a
+      )
+    );
+    
+    setShowEditAttendanceModal(false);
+    setEditingAttendance(null);
+    setToast({ open: true, type: "success", title: "Attendance Updated", message: "Timestamps have been corrected" });
   };
 
   return (
@@ -448,10 +498,23 @@ const ShiftsPage = () => {
                         const shiftAttendance = getAttendanceForDate(selectedShift.date);
                         return (
                           <div className="bg-secondary/30 rounded-xl p-4 space-y-3">
-                            <h5 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                              <Clock className="w-4 h-4" />
-                              Attendance Log
-                            </h5>
+                            <div className="flex items-center justify-between">
+                              <h5 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                                <Clock className="w-4 h-4" />
+                                Attendance Log
+                              </h5>
+                              {shiftAttendance && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 px-2 text-xs"
+                                  onClick={() => openEditAttendanceModal(shiftAttendance)}
+                                >
+                                  <Pencil className="w-3 h-3 mr-1" />
+                                  Edit
+                                </Button>
+                              )}
+                            </div>
                             {shiftAttendance ? (
                               <div className="space-y-2">
                                 <div className="flex items-center justify-between text-sm">
@@ -531,6 +594,7 @@ const ShiftsPage = () => {
                       <th className="p-4 text-left text-sm font-medium text-muted-foreground">Sign Out</th>
                       <th className="p-4 text-left text-sm font-medium text-muted-foreground">Total Hours</th>
                       <th className="p-4 text-left text-sm font-medium text-muted-foreground">Status</th>
+                      <th className="p-4 text-left text-sm font-medium text-muted-foreground">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -561,6 +625,17 @@ const ShiftsPage = () => {
                           ) : (
                             <Badge className="bg-muted text-muted-foreground">-</Badge>
                           )}
+                        </td>
+                        <td className="p-4">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2"
+                            onClick={() => openEditAttendanceModal(record)}
+                          >
+                            <Pencil className="w-4 h-4 mr-1" />
+                            Edit
+                          </Button>
                         </td>
                       </tr>
                     ))}
@@ -606,6 +681,51 @@ const ShiftsPage = () => {
             </Button>
             <Button className="flex-1 rounded-xl" onClick={handleSwapRequest}>
               Send Request
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Attendance Modal */}
+      <Dialog open={showEditAttendanceModal} onOpenChange={setShowEditAttendanceModal}>
+        <DialogContent className="rounded-2xl max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Edit Attendance</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {editingAttendance && (
+              <div className="bg-secondary/50 rounded-xl p-3 text-sm">
+                <p className="font-medium text-foreground">{editingAttendance.position}</p>
+                <p className="text-muted-foreground">
+                  {editingAttendance.date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                </p>
+              </div>
+            )}
+            <div>
+              <label className="text-sm font-medium text-foreground mb-2 block">Sign In Time</label>
+              <Input
+                type="time"
+                value={editSignIn}
+                onChange={(e) => setEditSignIn(e.target.value)}
+                className="rounded-xl"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-foreground mb-2 block">Sign Out Time</label>
+              <Input
+                type="time"
+                value={editSignOut}
+                onChange={(e) => setEditSignOut(e.target.value)}
+                className="rounded-xl"
+              />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setShowEditAttendanceModal(false)}>
+              Cancel
+            </Button>
+            <Button className="flex-1 rounded-xl" onClick={handleSaveAttendance}>
+              Save Changes
             </Button>
           </div>
         </DialogContent>
