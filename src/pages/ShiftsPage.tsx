@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, User, ArrowRightLeft, ArrowLeft, LogIn, LogOut, Pencil } from "lucide-react";
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, User, ArrowRightLeft, ArrowLeft, LogIn, LogOut, Pencil, CheckCircle, XCircle, AlertCircle, ShieldCheck } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -48,6 +48,22 @@ interface AttendanceRecord {
   totalHours: number | null;
 }
 
+interface AttendanceCorrection {
+  id: string;
+  attendanceId: string;
+  requestedBy: string;
+  requestedAt: Date;
+  originalSignIn: Date | null;
+  originalSignOut: Date | null;
+  newSignIn: Date | null;
+  newSignOut: Date | null;
+  reason: string;
+  status: "pending" | "approved" | "rejected";
+  reviewedBy?: string;
+  reviewedAt?: Date;
+  reviewNotes?: string;
+}
+
 const generateShifts = (): Shift[] => {
   const shifts: Shift[] = [];
   const positions = ["Kitchen Staff", "Waiter", "Cashier", "Delivery Rider"];
@@ -85,6 +101,25 @@ const mockAttendance: AttendanceRecord[] = [
   { id: "att3", date: new Date(Date.now() - 2 * 86400000), signInTime: new Date(new Date(Date.now() - 2 * 86400000).setHours(14, 0, 0)), signOutTime: new Date(new Date(Date.now() - 2 * 86400000).setHours(22, 15, 0)), position: "Cashier", totalHours: 8.25 },
 ];
 
+const mockCorrections: AttendanceCorrection[] = [
+  {
+    id: "corr1",
+    attendanceId: "att2",
+    requestedBy: "John Adeyemi",
+    requestedAt: new Date(Date.now() - 3600000),
+    originalSignIn: new Date(new Date(Date.now() - 86400000).setHours(6, 5, 0)),
+    originalSignOut: new Date(new Date(Date.now() - 86400000).setHours(14, 10, 0)),
+    newSignIn: new Date(new Date(Date.now() - 86400000).setHours(5, 55, 0)),
+    newSignOut: new Date(new Date(Date.now() - 86400000).setHours(14, 30, 0)),
+    reason: "Arrived early but forgot to clock in",
+    status: "pending",
+  },
+];
+
+// Simulated user role - in production, this would come from auth context
+const currentUserRole: "staff" | "manager" = "manager";
+const currentUserName = "Manager Admin";
+
 const ShiftsPage = () => {
   const navigate = useNavigate();
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -103,6 +138,12 @@ const ShiftsPage = () => {
   const [editingAttendance, setEditingAttendance] = useState<AttendanceRecord | null>(null);
   const [editSignIn, setEditSignIn] = useState("");
   const [editSignOut, setEditSignOut] = useState("");
+  const [editReason, setEditReason] = useState("");
+  const [corrections, setCorrections] = useState<AttendanceCorrection[]>(mockCorrections);
+  const [showApprovalsTab, setShowApprovalsTab] = useState(false);
+  const [selectedCorrection, setSelectedCorrection] = useState<AttendanceCorrection | null>(null);
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [reviewNotes, setReviewNotes] = useState("");
 
   // Get today's attendance record
   const todayAttendance = attendance.find(
@@ -253,6 +294,129 @@ const ShiftsPage = () => {
     return date.toTimeString().slice(0, 5); // Returns "HH:MM"
   };
 
+  const getPendingCorrectionForAttendance = (attendanceId: string) => {
+    return corrections.find(
+      (c) => c.attendanceId === attendanceId && c.status === "pending"
+    );
+  };
+
+  const handleSubmitCorrectionRequest = () => {
+    if (!editingAttendance) return;
+    if (!editReason.trim()) {
+      setToast({ open: true, type: "error", title: "Reason Required", message: "Please provide a reason for the correction" });
+      return;
+    }
+    
+    const signInDate = editSignIn ? new Date(editingAttendance.date) : null;
+    const signOutDate = editSignOut ? new Date(editingAttendance.date) : null;
+    
+    if (signInDate && editSignIn) {
+      const [hours, minutes] = editSignIn.split(":").map(Number);
+      signInDate.setHours(hours, minutes, 0);
+    }
+    
+    if (signOutDate && editSignOut) {
+      const [hours, minutes] = editSignOut.split(":").map(Number);
+      signOutDate.setHours(hours, minutes, 0);
+    }
+    
+    const newCorrection: AttendanceCorrection = {
+      id: `corr-${Date.now()}`,
+      attendanceId: editingAttendance.id,
+      requestedBy: "John Adeyemi", // Current user
+      requestedAt: new Date(),
+      originalSignIn: editingAttendance.signInTime,
+      originalSignOut: editingAttendance.signOutTime,
+      newSignIn: signInDate,
+      newSignOut: signOutDate,
+      reason: editReason.trim(),
+      status: "pending",
+    };
+    
+    setCorrections([newCorrection, ...corrections]);
+    setShowEditAttendanceModal(false);
+    setEditingAttendance(null);
+    setEditReason("");
+    setToast({ 
+      open: true, 
+      type: "info", 
+      title: "Correction Requested", 
+      message: "Your request has been sent to a manager for approval" 
+    });
+  };
+
+  const handleApproveCorrection = () => {
+    if (!selectedCorrection) return;
+    
+    // Find and update the attendance record
+    const attendanceRecord = attendance.find(a => a.id === selectedCorrection.attendanceId);
+    if (attendanceRecord) {
+      let totalHours: number | null = null;
+      if (selectedCorrection.newSignIn && selectedCorrection.newSignOut) {
+        totalHours = Math.round(((selectedCorrection.newSignOut.getTime() - selectedCorrection.newSignIn.getTime()) / (1000 * 60 * 60)) * 100) / 100;
+      }
+      
+      setAttendance(
+        attendance.map((a) =>
+          a.id === selectedCorrection.attendanceId
+            ? { ...a, signInTime: selectedCorrection.newSignIn, signOutTime: selectedCorrection.newSignOut, totalHours }
+            : a
+        )
+      );
+    }
+    
+    // Update correction status
+    setCorrections(
+      corrections.map((c) =>
+        c.id === selectedCorrection.id
+          ? { 
+              ...c, 
+              status: "approved" as const, 
+              reviewedBy: currentUserName, 
+              reviewedAt: new Date(),
+              reviewNotes: reviewNotes.trim() || undefined
+            }
+          : c
+      )
+    );
+    
+    setShowReviewModal(false);
+    setSelectedCorrection(null);
+    setReviewNotes("");
+    setToast({ open: true, type: "success", title: "Correction Approved", message: "Attendance has been updated" });
+  };
+
+  const handleRejectCorrection = () => {
+    if (!selectedCorrection) return;
+    
+    setCorrections(
+      corrections.map((c) =>
+        c.id === selectedCorrection.id
+          ? { 
+              ...c, 
+              status: "rejected" as const, 
+              reviewedBy: currentUserName, 
+              reviewedAt: new Date(),
+              reviewNotes: reviewNotes.trim() || undefined
+            }
+          : c
+      )
+    );
+    
+    setShowReviewModal(false);
+    setSelectedCorrection(null);
+    setReviewNotes("");
+    setToast({ open: true, type: "warning", title: "Correction Rejected", message: "The correction request has been denied" });
+  };
+
+  const openReviewModal = (correction: AttendanceCorrection) => {
+    setSelectedCorrection(correction);
+    setReviewNotes("");
+    setShowReviewModal(true);
+  };
+
+  const pendingCorrectionsCount = corrections.filter(c => c.status === "pending").length;
+
   const handleSaveAttendance = () => {
     if (!editingAttendance) return;
     
@@ -365,6 +529,17 @@ const ShiftsPage = () => {
               <Clock className="w-4 h-4 mr-1" />
               Attendance
             </TabsTrigger>
+            {currentUserRole === "manager" && (
+              <TabsTrigger value="approvals" className="rounded-lg data-[state=active]:bg-card relative">
+                <ShieldCheck className="w-4 h-4 mr-1" />
+                Approvals
+                {pendingCorrectionsCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-destructive text-destructive-foreground text-xs rounded-full flex items-center justify-center">
+                    {pendingCorrectionsCount}
+                  </span>
+                )}
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="calendar" className="mt-6">
@@ -496,6 +671,7 @@ const ShiftsPage = () => {
                       {/* Attendance Record for this Shift */}
                       {(() => {
                         const shiftAttendance = getAttendanceForDate(selectedShift.date);
+                        const pendingCorrection = shiftAttendance ? getPendingCorrectionForAttendance(shiftAttendance.id) : null;
                         return (
                           <div className="bg-secondary/30 rounded-xl p-4 space-y-3">
                             <div className="flex items-center justify-between">
@@ -503,7 +679,7 @@ const ShiftsPage = () => {
                                 <Clock className="w-4 h-4" />
                                 Attendance Log
                               </h5>
-                              {shiftAttendance && (
+                              {shiftAttendance && !pendingCorrection && (
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -515,6 +691,12 @@ const ShiftsPage = () => {
                                 </Button>
                               )}
                             </div>
+                            {pendingCorrection && (
+                              <Badge className="w-full justify-center bg-status-warning/10 text-status-warning border border-status-warning/30">
+                                <AlertCircle className="w-3 h-3 mr-1" />
+                                Correction Pending Approval
+                              </Badge>
+                            )}
                             {shiftAttendance ? (
                               <div className="space-y-2">
                                 <div className="flex items-center justify-between text-sm">
@@ -627,15 +809,28 @@ const ShiftsPage = () => {
                           )}
                         </td>
                         <td className="p-4">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 px-2"
-                            onClick={() => openEditAttendanceModal(record)}
-                          >
-                            <Pencil className="w-4 h-4 mr-1" />
-                            Edit
-                          </Button>
+                          {(() => {
+                            const pendingCorrection = getPendingCorrectionForAttendance(record.id);
+                            if (pendingCorrection) {
+                              return (
+                                <Badge className="bg-status-warning/10 text-status-warning">
+                                  <AlertCircle className="w-3 h-3 mr-1" />
+                                  Pending Approval
+                                </Badge>
+                              );
+                            }
+                            return (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 px-2"
+                                onClick={() => openEditAttendanceModal(record)}
+                              >
+                                <Pencil className="w-4 h-4 mr-1" />
+                                Edit
+                              </Button>
+                            );
+                          })()}
                         </td>
                       </tr>
                     ))}
@@ -644,6 +839,131 @@ const ShiftsPage = () => {
               </div>
             </div>
           </TabsContent>
+
+          {/* Manager Approvals Tab */}
+          {currentUserRole === "manager" && (
+            <TabsContent value="approvals" className="mt-6">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-foreground">Pending Correction Requests</h3>
+                  <Badge variant="outline" className="px-3">
+                    {pendingCorrectionsCount} pending
+                  </Badge>
+                </div>
+                
+                {corrections.length === 0 ? (
+                  <div className="bg-card border border-border rounded-2xl p-8 text-center">
+                    <ShieldCheck className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
+                    <p className="text-muted-foreground">No correction requests</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {corrections.map((correction) => {
+                      const attendanceRecord = attendance.find(a => a.id === correction.attendanceId);
+                      return (
+                        <div 
+                          key={correction.id} 
+                          className={`bg-card border rounded-2xl p-4 ${
+                            correction.status === "pending" 
+                              ? "border-status-warning" 
+                              : correction.status === "approved" 
+                                ? "border-status-success/50" 
+                                : "border-destructive/50"
+                          }`}
+                        >
+                          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                            <div className="flex-1 space-y-3">
+                              <div className="flex items-center gap-2">
+                                <User className="w-4 h-4 text-muted-foreground" />
+                                <span className="font-medium text-foreground">{correction.requestedBy}</span>
+                                <Badge 
+                                  variant="outline" 
+                                  className={`text-xs ${
+                                    correction.status === "pending"
+                                      ? "bg-status-warning/10 text-status-warning border-status-warning"
+                                      : correction.status === "approved"
+                                        ? "bg-status-success/10 text-status-success border-status-success"
+                                        : "bg-destructive/10 text-destructive border-destructive"
+                                  }`}
+                                >
+                                  {correction.status === "pending" && <AlertCircle className="w-3 h-3 mr-1" />}
+                                  {correction.status === "approved" && <CheckCircle className="w-3 h-3 mr-1" />}
+                                  {correction.status === "rejected" && <XCircle className="w-3 h-3 mr-1" />}
+                                  {correction.status.charAt(0).toUpperCase() + correction.status.slice(1)}
+                                </Badge>
+                              </div>
+                              
+                              <div className="text-sm text-muted-foreground">
+                                Requested {correction.requestedAt.toLocaleDateString("en-US", { 
+                                  weekday: "short", 
+                                  month: "short", 
+                                  day: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit"
+                                })}
+                              </div>
+                              
+                              <div className="bg-secondary/50 rounded-xl p-3 space-y-2">
+                                <div className="flex items-center gap-4 text-sm">
+                                  <div>
+                                    <span className="text-muted-foreground">Original: </span>
+                                    <span className="text-foreground">
+                                      {correction.originalSignIn ? formatTimeShort(correction.originalSignIn) : "—"} 
+                                      {" → "}
+                                      {correction.originalSignOut ? formatTimeShort(correction.originalSignOut) : "—"}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-4 text-sm">
+                                  <div>
+                                    <span className="text-muted-foreground">Requested: </span>
+                                    <span className="text-status-info font-medium">
+                                      {correction.newSignIn ? formatTimeShort(correction.newSignIn) : "—"} 
+                                      {" → "}
+                                      {correction.newSignOut ? formatTimeShort(correction.newSignOut) : "—"}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              <div className="bg-muted/50 rounded-xl p-3">
+                                <p className="text-sm text-foreground">
+                                  <span className="font-medium">Reason: </span>
+                                  {correction.reason}
+                                </p>
+                              </div>
+                              
+                              {correction.reviewedBy && (
+                                <div className="text-xs text-muted-foreground">
+                                  Reviewed by {correction.reviewedBy} on {correction.reviewedAt?.toLocaleDateString()}
+                                  {correction.reviewNotes && (
+                                    <p className="mt-1 italic">"{correction.reviewNotes}"</p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                            
+                            {correction.status === "pending" && (
+                              <div className="flex gap-2 sm:flex-col">
+                                <Button 
+                                  size="sm" 
+                                  className="rounded-xl bg-status-success hover:bg-status-success/90"
+                                  onClick={() => openReviewModal(correction)}
+                                >
+                                  <CheckCircle className="w-4 h-4 mr-1" />
+                                  Review
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+          )}
         </Tabs>
       </main>
 
@@ -690,7 +1010,7 @@ const ShiftsPage = () => {
       <Dialog open={showEditAttendanceModal} onOpenChange={setShowEditAttendanceModal}>
         <DialogContent className="rounded-2xl max-w-sm">
           <DialogHeader>
-            <DialogTitle>Edit Attendance</DialogTitle>
+            <DialogTitle>Request Attendance Correction</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             {editingAttendance && (
@@ -701,6 +1021,14 @@ const ShiftsPage = () => {
                 </p>
               </div>
             )}
+            
+            <div className="bg-status-info/10 border border-status-info/30 rounded-xl p-3">
+              <p className="text-xs text-status-info flex items-center gap-1">
+                <AlertCircle className="w-3.5 h-3.5" />
+                Changes require manager approval
+              </p>
+            </div>
+            
             <div>
               <label className="text-sm font-medium text-foreground mb-2 block">Sign In Time</label>
               <Input
@@ -719,13 +1047,112 @@ const ShiftsPage = () => {
                 className="rounded-xl"
               />
             </div>
+            <div>
+              <label className="text-sm font-medium text-foreground mb-2 block">Reason for Correction *</label>
+              <Input
+                type="text"
+                placeholder="e.g., Forgot to clock in on time"
+                value={editReason}
+                onChange={(e) => setEditReason(e.target.value)}
+                className="rounded-xl"
+              />
+            </div>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setShowEditAttendanceModal(false)}>
               Cancel
             </Button>
-            <Button className="flex-1 rounded-xl" onClick={handleSaveAttendance}>
-              Save Changes
+            <Button className="flex-1 rounded-xl" onClick={handleSubmitCorrectionRequest}>
+              Submit Request
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manager Review Modal */}
+      <Dialog open={showReviewModal} onOpenChange={setShowReviewModal}>
+        <DialogContent className="rounded-2xl max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-primary" />
+              Review Correction Request
+            </DialogTitle>
+          </DialogHeader>
+          {selectedCorrection && (
+            <div className="space-y-4 py-4">
+              <div className="bg-secondary/50 rounded-xl p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <User className="w-4 h-4 text-muted-foreground" />
+                  <span className="font-medium text-foreground">{selectedCorrection.requestedBy}</span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Requested {selectedCorrection.requestedAt.toLocaleDateString("en-US", { 
+                    weekday: "short", 
+                    month: "short", 
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit"
+                  })}
+                </p>
+              </div>
+              
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium text-foreground">Time Changes</h4>
+                <div className="bg-muted/50 rounded-xl p-3 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Original Sign In:</span>
+                    <span className="text-foreground">{selectedCorrection.originalSignIn ? formatTimeShort(selectedCorrection.originalSignIn) : "—"}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Requested Sign In:</span>
+                    <span className="text-status-info font-medium">{selectedCorrection.newSignIn ? formatTimeShort(selectedCorrection.newSignIn) : "—"}</span>
+                  </div>
+                  <div className="border-t border-border my-2" />
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Original Sign Out:</span>
+                    <span className="text-foreground">{selectedCorrection.originalSignOut ? formatTimeShort(selectedCorrection.originalSignOut) : "—"}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Requested Sign Out:</span>
+                    <span className="text-status-info font-medium">{selectedCorrection.newSignOut ? formatTimeShort(selectedCorrection.newSignOut) : "—"}</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div>
+                <h4 className="text-sm font-medium text-foreground mb-2">Reason Given</h4>
+                <div className="bg-muted/50 rounded-xl p-3">
+                  <p className="text-sm text-foreground">{selectedCorrection.reason}</p>
+                </div>
+              </div>
+              
+              <div>
+                <label className="text-sm font-medium text-foreground mb-2 block">Review Notes (Optional)</label>
+                <Input
+                  type="text"
+                  placeholder="Add any notes about this decision..."
+                  value={reviewNotes}
+                  onChange={(e) => setReviewNotes(e.target.value)}
+                  className="rounded-xl"
+                />
+              </div>
+            </div>
+          )}
+          <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              className="flex-1 rounded-xl border-destructive text-destructive hover:bg-destructive/10" 
+              onClick={handleRejectCorrection}
+            >
+              <XCircle className="w-4 h-4 mr-1" />
+              Reject
+            </Button>
+            <Button 
+              className="flex-1 rounded-xl bg-status-success hover:bg-status-success/90" 
+              onClick={handleApproveCorrection}
+            >
+              <CheckCircle className="w-4 h-4 mr-1" />
+              Approve
             </Button>
           </div>
         </DialogContent>
