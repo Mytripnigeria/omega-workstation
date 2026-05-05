@@ -41,6 +41,8 @@ import ActivityLog from "@/components/ActivityLog";
 import ItemDetailsModal from "@/components/ItemDetailsModal";
 import GadgetManagement from "@/components/GadgetManagement";
 import UsageLogTab from "@/components/UsageLogTab";
+import { useCategories } from "@/hooks/useCategories";
+import CategoryLoadError from "@/components/CategoryLoadError";
 
 interface InventoryItem {
   id: string;
@@ -120,6 +122,11 @@ const emptyNewItem: NewItem = { name: "", category: "", quantity: "", unit: "", 
 
 const InstorePage = () => {
   const navigate = useNavigate();
+  const {
+    data: inventoryCategories = [],
+    isError: categoriesError,
+    refetch: refetchCategories,
+  } = useCategories("inventory");
   const [items, setItems] = useState<InventoryItem[]>(mockItems);
   const [pendingReturns, setPendingReturns] = useState<PendingReturn[]>(mockPendingReturns);
   const [searchQuery, setSearchQuery] = useState("");
@@ -543,12 +550,25 @@ const InstorePage = () => {
                   className="rounded-xl"
                 />
                 <div className="grid grid-cols-2 gap-3">
-                  <Input 
-                    placeholder="Category" 
-                    value={item.category}
-                    onChange={(e) => updateNewItem(index, "category", e.target.value)}
-                    className="rounded-xl"
-                  />
+                  {categoriesError ? (
+                    <CategoryLoadError compact onRetry={() => refetchCategories()} />
+                  ) : (
+                    <Select
+                      value={item.category}
+                      onValueChange={(v) => updateNewItem(index, "category", v)}
+                    >
+                      <SelectTrigger className="rounded-xl">
+                        <SelectValue placeholder="Category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {inventoryCategories.map((c) => (
+                          <SelectItem key={c.id} value={c.name}>
+                            {c.emoji ? `${c.emoji} ${c.name}` : c.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                   <Select value={item.supplier} onValueChange={(v) => updateNewItem(index, "supplier", v)}>
                     <SelectTrigger className="rounded-xl">
                       <SelectValue placeholder="Supplier" />

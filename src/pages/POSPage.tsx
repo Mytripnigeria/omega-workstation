@@ -63,6 +63,8 @@ import ActivityLogButton from "@/components/ActivityLogButton";
 import KeyboardShortcutsModal from "@/components/KeyboardShortcutsModal";
 import StaffFinancePanel from "@/components/StaffFinancePanel";
 import { useBeepSound } from "@/hooks/useBeepSound";
+import { useCategories } from "@/hooks/useCategories";
+import CategoryLoadError from "@/components/CategoryLoadError";
 
 interface Variation {
   id: string;
@@ -110,17 +112,6 @@ interface IncomingOrder {
   orderType?: "dine-in" | "takeaway" | "delivery";
   billType?: "quick" | "process";
 }
-
-const categories = [
-  { id: "popular", name: "Popular", icon: "🔥" },
-  { id: "new", name: "New Release", icon: "✨" },
-  { id: "specialties", name: "Specialties", icon: "👨‍🍳" },
-  { id: "starters", name: "Starters", icon: "🥗" },
-  { id: "mains", name: "Mains", icon: "🍽️" },
-  { id: "sides", name: "Sides", icon: "🍟" },
-  { id: "drinks", name: "Drinks", icon: "🧃" },
-  { id: "desserts", name: "Desserts", icon: "🍰" },
-];
 
 const menuItems: MenuItem[] = [
   // Popular
@@ -197,7 +188,23 @@ const mockOrderHistory = [
 const POSPage = () => {
   const navigate = useNavigate();
   const [posMode, setPosMode] = useState<"counter" | "selfservice">("counter");
-  const [selectedCategory, setSelectedCategory] = useState("popular");
+  const {
+    data: menuCategories = [],
+    isLoading: categoriesLoading,
+    isError: categoriesError,
+    refetch: refetchCategories,
+  } = useCategories("menu");
+  const [selectedCategory, setSelectedCategory] = useState<string>("");
+
+  useEffect(() => {
+    if (!selectedCategory && menuCategories.length > 0) {
+      setSelectedCategory(menuCategories[0].id);
+    }
+  }, [menuCategories, selectedCategory]);
+
+  const selectedCategoryName = menuCategories
+    .find((c) => c.id === selectedCategory)
+    ?.name.toLowerCase();
   const [searchQuery, setSearchQuery] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
@@ -277,7 +284,7 @@ const POSPage = () => {
     if (searchQuery.trim()) {
       return matchesSearch;
     }
-    return item.category === selectedCategory;
+    return selectedCategoryName ? item.category === selectedCategoryName : false;
   });
 
   const handleItemClick = (item: MenuItem) => {
@@ -670,27 +677,40 @@ const POSPage = () => {
 
               {/* Category Pills */}
               <div className="flex gap-2 overflow-x-auto pb-4 scrollbar-hide">
-                {categories.map((cat) => (
-                  <button
-                    key={cat.id}
-                    onClick={() => setSelectedCategory(cat.id)}
-                    className={`flex items-center gap-2 px-4 py-2.5 rounded-full whitespace-nowrap transition-all font-medium ${
-                      selectedCategory === cat.id 
-                        ? "bg-primary text-primary-foreground" 
-                        : "bg-card border border-border hover:border-primary/30"
-                    } ${posMode === "selfservice" ? "text-base py-3 px-5" : "text-sm"}`}
-                  >
-                    <span>{cat.icon}</span>
-                    <span>{cat.name}</span>
-                  </button>
-                ))}
+                {categoriesError ? (
+                  <CategoryLoadError compact onRetry={() => refetchCategories()} />
+                ) : categoriesLoading ? (
+                  Array.from({ length: 6 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="h-10 w-24 rounded-full bg-muted animate-pulse flex-shrink-0"
+                    />
+                  ))
+                ) : (
+                  menuCategories.map((cat) => (
+                    <button
+                      key={cat.id}
+                      onClick={() => setSelectedCategory(cat.id)}
+                      className={`flex items-center gap-2 px-4 py-2.5 rounded-full whitespace-nowrap transition-all font-medium ${
+                        selectedCategory === cat.id
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-card border border-border hover:border-primary/30"
+                      } ${posMode === "selfservice" ? "text-base py-3 px-5" : "text-sm"}`}
+                    >
+                      {cat.emoji && <span>{cat.emoji}</span>}
+                      <span>{cat.name}</span>
+                    </button>
+                  ))
+                )}
               </div>
 
               {/* Category Title */}
-              <h2 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
-                {categories.find(c => c.id === selectedCategory)?.name}
-                <span>{categories.find(c => c.id === selectedCategory)?.icon}</span>
-              </h2>
+              {selectedCategory && (
+                <h2 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
+                  {menuCategories.find((c) => c.id === selectedCategory)?.name}
+                  <span>{menuCategories.find((c) => c.id === selectedCategory)?.emoji}</span>
+                </h2>
+              )}
 
               {/* Menu Grid */}
               <div className={`grid gap-3 ${

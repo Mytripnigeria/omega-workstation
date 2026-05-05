@@ -31,13 +31,7 @@ import ThemeToggle from "@/components/ThemeToggle";
 import FullscreenToggle from "@/components/FullscreenToggle";
 import KPIModal from "@/components/KPIModal";
 import ConfirmDialog from "@/components/ConfirmDialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { useActiveShift, useClockIn, useClockOut, useMyShifts } from "@/hooks/useShifts";
 import {
   Popover,
   PopoverContent,
@@ -47,8 +41,12 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface Staff {
   id: string;
-  name: string;
-  role: string;
+  staffCode?: string;
+  name?: string;
+  firstName?: string;
+  lastName?: string;
+  role?: string;
+  roleName?: string;
 }
 
 interface ServiceItem {
@@ -76,32 +74,29 @@ const services: ServiceItem[] = [
   { title: "Managers", description: "Overview", icon: Shield, route: "/managers", color: "text-category-cream" },
 ];
 
-const shiftPositions = ["Kitchen Staff", "Waiter", "Cashier", "Delivery Rider", "Supervisor"];
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const [currentStaff, setCurrentStaff] = useState<Staff | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showKPI, setShowKPI] = useState(false);
-  const [shiftPosition, setShiftPosition] = useState("Kitchen Staff");
-  const [isClockedIn, setIsClockedIn] = useState(false);
-  const [clockInTime, setClockInTime] = useState<Date | null>(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; action: () => void; title: string; description: string }>({
     open: false, action: () => {}, title: "", description: ""
   });
 
   useEffect(() => {
-    const staffData = sessionStorage.getItem("currentStaff");
+    // Support both old format (name/role) and new format (firstName/lastName/roleName)
+    const staffData = sessionStorage.getItem("workstation_staff") || sessionStorage.getItem("currentStaff");
     if (!staffData) { navigate("/"); return; }
-    setCurrentStaff(JSON.parse(staffData));
+    setCurrentStaff(JSON.parse(staffData) as Staff);
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    
+
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-    
+
     return () => {
       clearInterval(timer);
       window.removeEventListener('online', handleOnline);
@@ -109,12 +104,26 @@ const Dashboard = () => {
     };
   }, [navigate]);
 
+  // Active shift comes from real backend
+  const { data: activeShift } = useActiveShift(currentStaff?.id);
+  const todayStr = new Date().toISOString().split("T")[0];
+  const { data: todayShiftsPage } = useMyShifts(currentStaff?.id, todayStr, todayStr);
+  const todayShift = todayShiftsPage?.data?.[0] ?? null;
+  const clockIn = useClockIn();
+  const clockOut = useClockOut();
+
+  const isClockedIn = !!activeShift;
+  const clockInTime = activeShift?.actualClockIn ? new Date(activeShift.actualClockIn) : null;
+  const shiftPosition = activeShift?.roleName ?? todayShift?.roleName ?? "Staff";
+
   const handleLogout = () => {
     setConfirmDialog({
       open: true,
       title: "Sign Out",
       description: "Are you sure you want to sign out?",
       action: () => {
+        sessionStorage.removeItem("workstation_staff");
+        sessionStorage.removeItem("workstation_token");
         sessionStorage.removeItem("currentStaff");
         navigate("/");
       }
@@ -122,14 +131,18 @@ const Dashboard = () => {
   };
 
   const handleClockToggle = () => {
-    if (isClockedIn) {
+    if (isClockedIn && activeShift) {
       setConfirmDialog({
         open: true, title: "Clock Out", description: "Are you sure you want to clock out?",
-        action: () => { setIsClockedIn(false); setClockInTime(null); }
+        action: () => clockOut.mutate(activeShift.id),
       });
+    } else if (todayShift) {
+      clockIn.mutate(todayShift.id);
     } else {
-      setIsClockedIn(true);
-      setClockInTime(new Date());
+      setConfirmDialog({
+        open: true, title: "No shift today", description: "You don't have a shift scheduled for today. View Shifts to see your schedule.",
+        action: () => navigate("/shifts"),
+      });
     }
   };
 
@@ -319,31 +332,25 @@ const Dashboard = () => {
               {/* Left - Welcome */}
               <div className="flex-1">
                 <h2 className="text-xl sm:text-2xl font-bold text-foreground">
-                  Welcome back, {currentStaff?.name}
+                  Welcome back, {currentStaff?.name ?? currentStaff?.firstName}
                 </h2>
                 <p className="text-muted-foreground text-sm mt-1">
                   {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
                 </p>
               </div>
 
-              {/* Right - Position Selector & Clock Button */}
+              {/* Right - Role Display & Clock Button */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                <Select value={shiftPosition} onValueChange={setShiftPosition}>
-                  <SelectTrigger className="w-full sm:w-[180px] h-11 rounded-xl bg-secondary/50 border-border">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {shiftPositions.map((pos) => (
-                      <SelectItem key={pos} value={pos}>{pos}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button 
-                  onClick={handleClockToggle} 
+                <div className="px-4 py-2 h-11 rounded-xl bg-secondary/50 border border-border flex items-center text-sm font-medium text-foreground sm:w-[180px]">
+                  {shiftPosition}
+                </div>
+                <Button
+                  onClick={handleClockToggle}
                   size="lg"
+                  disabled={clockIn.isPending || clockOut.isPending}
                   className={`h-11 rounded-xl px-6 font-medium ${
-                    isClockedIn 
-                      ? "bg-status-success/15 text-status-success border border-status-success/30 hover:bg-status-success/25" 
+                    isClockedIn
+                      ? "bg-status-success/15 text-status-success border border-status-success/30 hover:bg-status-success/25"
                       : "bg-primary text-primary-foreground hover:bg-primary/90"
                   }`}
                   variant={isClockedIn ? "outline" : "default"}

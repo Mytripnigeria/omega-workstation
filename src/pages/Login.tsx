@@ -6,26 +6,15 @@ import PinPad from "@/components/PinPad";
 import ThemeToggle from "@/components/ThemeToggle";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-
-// Mock staff data
-const mockStaff = [
-  { id: "STF001", name: "John D.", role: "Manager" },
-  { id: "STF002", name: "Sarah M.", role: "Server" },
-  { id: "STF003", name: "Mike R.", role: "Chef" },
-  { id: "STF004", name: "Emma L.", role: "Cashier" },
-  { id: "STF005", name: "David K.", role: "Delivery" },
-  { id: "STF006", name: "Lisa P.", role: "Server" },
-];
-
-// Mock PIN for demo
-const DEMO_PIN = "1234";
+import { staffAuthService, type StaffLookupResult } from "@/services/auth";
 
 const Login = () => {
   const navigate = useNavigate();
   const [staffId, setStaffId] = useState("");
   const [pin, setPin] = useState("");
   const [step, setStep] = useState<"staffid" | "pin">("staffid");
-  const [foundStaff, setFoundStaff] = useState<typeof mockStaff[0] | null>(null);
+  const [foundStaff, setFoundStaff] = useState<StaffLookupResult | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("theme");
@@ -36,25 +25,33 @@ const Login = () => {
     }
   }, []);
 
-  const handleStaffIdSubmit = () => {
-    const staff = mockStaff.find((s) => s.id.toLowerCase() === staffId.toLowerCase());
-    if (staff) {
+  const handleStaffIdSubmit = async () => {
+    if (!staffId.trim()) return;
+    setIsLoading(true);
+    try {
+      const staff = await staffAuthService.lookup(staffId.toUpperCase());
       setFoundStaff(staff);
       setStep("pin");
       setPin("");
-    } else {
-      toast.error("Staff ID not found. Try STF001-STF006 for demo.");
+    } catch {
+      toast.error("Staff ID not found. Please check and try again.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handlePinSubmit = () => {
-    if (pin === DEMO_PIN) {
-      toast.success(`Welcome, ${foundStaff?.name}!`);
-      sessionStorage.setItem("currentStaff", JSON.stringify(foundStaff));
+  const handlePinSubmit = async () => {
+    if (pin.length !== 4) return;
+    setIsLoading(true);
+    try {
+      const staff = await staffAuthService.login(staffId.toUpperCase(), pin);
+      toast.success(`Welcome, ${staff.firstName}!`);
       navigate("/dashboard");
-    } else {
-      toast.error("Invalid PIN. Try 1234 for demo.");
+    } catch {
+      toast.error("Invalid PIN. Please try again.");
       setPin("");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -99,17 +96,14 @@ const Login = () => {
                   onKeyDown={(e) => e.key === "Enter" && handleStaffIdSubmit()}
                   autoFocus
                 />
-                <Button 
+                <Button
                   className="w-full h-12 rounded-xl text-base font-semibold"
                   onClick={handleStaffIdSubmit}
-                  disabled={!staffId.trim()}
+                  disabled={!staffId.trim() || isLoading}
                 >
-                  Continue
+                  {isLoading ? "Checking..." : "Continue"}
                 </Button>
               </div>
-              <p className="text-center text-xs text-muted-foreground mt-6">
-                Demo IDs: STF001 - STF006
-              </p>
             </>
           ) : (
             <>
@@ -133,12 +127,8 @@ const Login = () => {
               <PinPad
                 pin={pin}
                 onPinChange={setPin}
-                onSubmit={handlePinSubmit}
+                onSubmit={isLoading ? () => {} : handlePinSubmit}
               />
-              
-              <p className="text-center text-xs text-muted-foreground mt-6">
-                Demo PIN: 1234
-              </p>
             </>
           )}
         </div>

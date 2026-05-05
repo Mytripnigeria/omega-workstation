@@ -26,14 +26,7 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import { useNavigate } from "react-router-dom";
 import ActivityLogButton from "@/components/ActivityLogButton";
 import ActivityLog from "@/components/ActivityLog";
-
-interface Notification {
-  id: string;
-  title: string;
-  message: string;
-  time: string;
-  read: boolean;
-}
+import { useMyPayslips } from "@/hooks/usePayslips";
 
 interface PayslipEntry {
   id: string;
@@ -43,18 +36,6 @@ interface PayslipEntry {
   netPay: number;
   status: "paid" | "pending";
 }
-
-const mockNotifications: Notification[] = [
-  { id: "1", title: "Shift Reminder", message: "Your shift starts in 2 hours", time: "1 hour ago", read: false },
-  { id: "2", title: "New Schedule", message: "Next week's schedule is available", time: "3 hours ago", read: false },
-  { id: "3", title: "Payslip Ready", message: "Your December payslip is ready", time: "1 day ago", read: true },
-];
-
-const mockPayslips: PayslipEntry[] = [
-  { id: "1", period: "December 2024", grossPay: 185000, deductions: 15000, netPay: 170000, status: "paid" },
-  { id: "2", period: "November 2024", grossPay: 185000, deductions: 15000, netPay: 170000, status: "paid" },
-  { id: "3", period: "October 2024", grossPay: 180000, deductions: 14500, netPay: 165500, status: "paid" },
-];
 
 const ProfilePage = () => {
   const navigate = useNavigate();
@@ -67,20 +48,36 @@ const ProfilePage = () => {
     description: string;
     onConfirm: () => void;
   }>({ open: false, title: "", description: "", onConfirm: () => {} });
+  const { data: payslipsPage } = useMyPayslips({ limit: 10 });
+  const payslips: PayslipEntry[] = (payslipsPage?.data ?? []).map((p) => ({
+    id: p.id,
+    period: p.period,
+    grossPay: p.grossPay,
+    deductions: p.deductions.reduce((sum, d) => sum + d.amount, 0),
+    netPay: p.netPay,
+    status: p.status === "paid" ? "paid" : "pending",
+  }));
+
+  const staffRaw = sessionStorage.getItem("workstation_staff");
+  const sessionStaff = staffRaw
+    ? (JSON.parse(staffRaw) as { firstName?: string; lastName?: string; roleName?: string; id?: string })
+    : null;
 
   const currentStaff = {
-    name: "John Doe",
-    email: "john.doe@mrjollof.com",
-    phone: "+234 801 234 5678",
-    role: "Kitchen Staff",
-    department: "Kitchen",
-    employeeId: "EMP-2024-001",
-    startDate: "March 15, 2024",
-    location: "Mr. Jollof - Makurdi",
+    name: sessionStaff
+      ? `${sessionStaff.firstName ?? ""} ${sessionStaff.lastName ?? ""}`.trim()
+      : "Staff Member",
+    email: "",
+    phone: "",
+    role: sessionStaff?.roleName ?? "Staff",
+    department: "",
+    employeeId: "",
+    startDate: "",
+    location: "Mr. Jollof",
   };
 
   const menuItems = [
-    { id: "notifications", label: "Messages & Notifications", icon: Bell, badge: "2" },
+    { id: "notifications", label: "Messages & Notifications", icon: Bell, badge: "0" },
     { id: "payslips", label: "Payslip Details", icon: FileText },
     { id: "job", label: "Job Details", icon: Briefcase },
     { id: "personal", label: "Personal Information", icon: User },
@@ -167,21 +164,10 @@ const ProfilePage = () => {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3 max-h-[400px] overflow-auto">
-            {mockNotifications.map((notif) => (
-              <div
-                key={notif.id}
-                className={`p-4 rounded-xl border ${
-                  notif.read ? "bg-secondary/30 border-border" : "bg-primary/5 border-primary/30"
-                }`}
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <h4 className="font-medium text-foreground">{notif.title}</h4>
-                  {!notif.read && <Badge className="bg-primary text-primary-foreground text-xs">New</Badge>}
-                </div>
-                <p className="text-sm text-muted-foreground">{notif.message}</p>
-                <p className="text-xs text-muted-foreground mt-1">{notif.time}</p>
-              </div>
-            ))}
+            <div className="p-8 text-center text-sm text-muted-foreground">
+              <Bell className="w-10 h-10 mx-auto mb-2 opacity-40" />
+              <p>No notifications yet.</p>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -196,7 +182,7 @@ const ProfilePage = () => {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3 max-h-[400px] overflow-auto">
-            {mockPayslips.map((payslip) => (
+            {payslips.map((payslip) => (
               <div key={payslip.id} className="p-4 bg-secondary/30 rounded-xl">
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="font-medium text-foreground">{payslip.period}</h4>

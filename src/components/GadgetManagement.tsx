@@ -31,6 +31,7 @@ import {
   Thermometer,
 } from "lucide-react";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import { useCategories } from "@/hooks/useCategories";
 
 interface Gadget {
   id: string;
@@ -71,6 +72,7 @@ const mockMaintenanceLogs: MaintenanceLog[] = [
 ];
 
 const GadgetManagement = () => {
+  const { data: equipmentCategories = [] } = useCategories("equipment");
   const [gadgets, setGadgets] = useState<Gadget[]>(mockGadgets);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterCondition, setFilterCondition] = useState("all");
@@ -118,11 +120,22 @@ const GadgetManagement = () => {
   };
 
   const getCategoryIcon = (category: string) => {
+    const match = equipmentCategories.find(
+      (c) => c.name.toLowerCase() === category.toLowerCase(),
+    );
+    if (match?.emoji) {
+      return <span className="text-base leading-none">{match.emoji}</span>;
+    }
+    // Static fallbacks for legacy gadgets whose categories haven't synced yet.
     switch (category) {
-      case "Refrigeration": return <Thermometer className="w-4 h-4" />;
-      case "Cooking": return <Zap className="w-4 h-4" />;
-      case "Processing": return <Settings className="w-4 h-4" />;
-      default: return <Wrench className="w-4 h-4" />;
+      case "Refrigeration":
+        return <Thermometer className="w-4 h-4" />;
+      case "Cooking":
+        return <Zap className="w-4 h-4" />;
+      case "Processing":
+        return <Settings className="w-4 h-4" />;
+      default:
+        return <Wrench className="w-4 h-4" />;
     }
   };
 

@@ -1,208 +1,107 @@
-import { useState } from "react";
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, User, ArrowRightLeft, ArrowLeft, LogIn, LogOut, Pencil, CheckCircle, XCircle, AlertCircle, ShieldCheck } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { useMemo, useState } from "react";
+import {
+  Calendar as CalendarIcon,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  User,
+  ArrowLeft,
+  LogIn,
+  LogOut,
+  CheckCircle,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import ToastNotification from "@/components/ToastNotification";
 import { useNavigate } from "react-router-dom";
 import ActivityLogButton from "@/components/ActivityLogButton";
 import ActivityLog from "@/components/ActivityLog";
-
-interface Shift {
-  id: string;
-  date: Date;
-  startTime: string;
-  endTime: string;
-  position: string;
-  location: string;
-  notes?: string;
-}
-
-interface TeamMember {
-  id: string;
-  name: string;
-  position: string;
-}
-
-interface AttendanceRecord {
-  id: string;
-  date: Date;
-  signInTime: Date | null;
-  signOutTime: Date | null;
-  position: string;
-  totalHours: number | null;
-}
-
-interface AttendanceCorrection {
-  id: string;
-  attendanceId: string;
-  requestedBy: string;
-  requestedAt: Date;
-  originalSignIn: Date | null;
-  originalSignOut: Date | null;
-  newSignIn: Date | null;
-  newSignOut: Date | null;
-  reason: string;
-  status: "pending" | "approved" | "rejected";
-  reviewedBy?: string;
-  reviewedAt?: Date;
-  reviewNotes?: string;
-}
-
-const generateShifts = (): Shift[] => {
-  const shifts: Shift[] = [];
-  const positions = ["Kitchen Staff", "Waiter", "Cashier", "Delivery Rider"];
-  const now = new Date();
-  
-  for (let i = 0; i < 30; i++) {
-    if (Math.random() > 0.4) {
-      const date = new Date(now.getFullYear(), now.getMonth(), i + 1);
-      const startHour = Math.random() > 0.5 ? 6 : 14;
-      shifts.push({
-        id: `shift-${i}`,
-        date,
-        startTime: `${startHour}:00`,
-        endTime: `${startHour + 8}:00`,
-        position: positions[Math.floor(Math.random() * positions.length)],
-        location: "Mr. Jollof - Makurdi",
-        notes: Math.random() > 0.7 ? "Please come 15 minutes early" : undefined,
-      });
-    }
-  }
-  return shifts;
-};
-
-const mockTeamMembers: TeamMember[] = [
-  { id: "tm1", name: "John Adeyemi", position: "Kitchen Staff" },
-  { id: "tm2", name: "Sarah Okonkwo", position: "Waiter" },
-  { id: "tm3", name: "Michael Bello", position: "Cashier" },
-  { id: "tm4", name: "Amara Eze", position: "Delivery Rider" },
-  { id: "tm5", name: "David Okoro", position: "Kitchen Staff" },
-];
-
-const mockAttendance: AttendanceRecord[] = [
-  { id: "att1", date: new Date(), signInTime: new Date(new Date().setHours(6, 2, 0)), signOutTime: null, position: "Kitchen Staff", totalHours: null },
-  { id: "att2", date: new Date(Date.now() - 86400000), signInTime: new Date(new Date(Date.now() - 86400000).setHours(6, 5, 0)), signOutTime: new Date(new Date(Date.now() - 86400000).setHours(14, 10, 0)), position: "Kitchen Staff", totalHours: 8.08 },
-  { id: "att3", date: new Date(Date.now() - 2 * 86400000), signInTime: new Date(new Date(Date.now() - 2 * 86400000).setHours(14, 0, 0)), signOutTime: new Date(new Date(Date.now() - 2 * 86400000).setHours(22, 15, 0)), position: "Cashier", totalHours: 8.25 },
-];
-
-const mockCorrections: AttendanceCorrection[] = [
-  {
-    id: "corr1",
-    attendanceId: "att2",
-    requestedBy: "John Adeyemi",
-    requestedAt: new Date(Date.now() - 3600000),
-    originalSignIn: new Date(new Date(Date.now() - 86400000).setHours(6, 5, 0)),
-    originalSignOut: new Date(new Date(Date.now() - 86400000).setHours(14, 10, 0)),
-    newSignIn: new Date(new Date(Date.now() - 86400000).setHours(5, 55, 0)),
-    newSignOut: new Date(new Date(Date.now() - 86400000).setHours(14, 30, 0)),
-    reason: "Arrived early but forgot to clock in",
-    status: "pending",
-  },
-];
-
-// Simulated user role - in production, this would come from auth context
-const currentUserRole: "staff" | "manager" = "manager";
-const currentUserName = "Manager Admin";
+import { workstationAuth } from "@/services/api";
+import { useMyShifts, useClockIn, useClockOut } from "@/hooks/useShifts";
+import type { Shift } from "@/types/shift";
 
 const ShiftsPage = () => {
   const navigate = useNavigate();
+  const staff = workstationAuth.getStaff();
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [shifts] = useState<Shift[]>(generateShifts());
-  const [attendance, setAttendance] = useState<AttendanceRecord[]>(mockAttendance);
   const [selectedShift, setSelectedShift] = useState<Shift | null>(null);
-  const [showSwapModal, setShowSwapModal] = useState(false);
-  const [selectedTeammate, setSelectedTeammate] = useState("");
   const [activeTab, setActiveTab] = useState("calendar");
-  const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; description: string; action: () => void }>({
-    open: false, title: "", description: "", action: () => {},
-  });
-  const [toast, setToast] = useState<{ open: boolean; type: "success" | "error" | "warning" | "info"; title: string; message?: string }>({ open: false, type: "success", title: "" });
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    title: string;
+    description: string;
+    action: () => void;
+  }>({ open: false, title: "", description: "", action: () => {} });
+  const [toast, setToast] = useState<{
+    open: boolean;
+    type: "success" | "error" | "warning" | "info";
+    title: string;
+    message?: string;
+  }>({ open: false, type: "success", title: "" });
   const [showActivityLog, setShowActivityLog] = useState(false);
-  const [showEditAttendanceModal, setShowEditAttendanceModal] = useState(false);
-  const [editingAttendance, setEditingAttendance] = useState<AttendanceRecord | null>(null);
-  const [editSignIn, setEditSignIn] = useState("");
-  const [editSignOut, setEditSignOut] = useState("");
-  const [editReason, setEditReason] = useState("");
-  const [corrections, setCorrections] = useState<AttendanceCorrection[]>(mockCorrections);
-  const [showApprovalsTab, setShowApprovalsTab] = useState(false);
-  const [selectedCorrection, setSelectedCorrection] = useState<AttendanceCorrection | null>(null);
-  const [showReviewModal, setShowReviewModal] = useState(false);
-  const [reviewNotes, setReviewNotes] = useState("");
 
-  // Get today's attendance record
-  const todayAttendance = attendance.find(
-    (a) =>
-      a.date.getDate() === new Date().getDate() &&
-      a.date.getMonth() === new Date().getMonth() &&
-      a.date.getFullYear() === new Date().getFullYear()
-  );
+  // Load month-bounded shifts for the staff member.
+  const { dateFrom, dateTo } = useMemo(() => {
+    const first = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+    const last = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+    const fmt = (d: Date) => d.toISOString().split("T")[0];
+    return { dateFrom: fmt(first), dateTo: fmt(last) };
+  }, [currentDate]);
 
-  const isClockedIn = todayAttendance && todayAttendance.signInTime && !todayAttendance.signOutTime;
+  const { data: shiftsPage, isLoading } = useMyShifts(staff?.id, dateFrom, dateTo);
+  const shifts = shiftsPage?.data ?? [];
+
+  const clockIn = useClockIn();
+  const clockOut = useClockOut();
+
+  // "Today" lookups
+  const todayStr = new Date().toISOString().split("T")[0];
+  const todayShift = shifts.find((s) => s.date === todayStr) ?? null;
+  const isClockedIn =
+    todayShift?.status === "in-progress" || (!!todayShift?.actualClockIn && !todayShift?.actualClockOut);
 
   const handleClockIn = () => {
-    if (todayAttendance) {
-      setToast({ open: true, type: "warning", title: "Already Clocked In", message: "You have already signed in today" });
+    if (!todayShift) {
+      setToast({ open: true, type: "warning", title: "No shift today", message: "You don't have a shift scheduled for today." });
       return;
     }
-    const newRecord: AttendanceRecord = {
-      id: `att-${Date.now()}`,
-      date: new Date(),
-      signInTime: new Date(),
-      signOutTime: null,
-      position: "Kitchen Staff",
-      totalHours: null,
-    };
-    setAttendance([newRecord, ...attendance]);
-    setToast({ open: true, type: "success", title: "Clocked In", message: `Signed in at ${new Date().toLocaleTimeString()}` });
+    if (isClockedIn) {
+      setToast({ open: true, type: "warning", title: "Already clocked in" });
+      return;
+    }
+    clockIn.mutate(todayShift.id, {
+      onSuccess: () =>
+        setToast({ open: true, type: "success", title: "Clocked in", message: `Signed in at ${new Date().toLocaleTimeString()}` }),
+      onError: (e: Error) =>
+        setToast({ open: true, type: "error", title: "Clock-in failed", message: e.message }),
+    });
   };
 
   const handleClockOut = () => {
-    if (!todayAttendance || !todayAttendance.signInTime) {
-      setToast({ open: true, type: "error", title: "Error", message: "You haven't signed in today" });
-      return;
-    }
-    if (todayAttendance.signOutTime) {
-      setToast({ open: true, type: "warning", title: "Already Clocked Out", message: "You have already signed out today" });
+    if (!todayShift) return;
+    if (!isClockedIn) {
+      setToast({ open: true, type: "error", title: "Not clocked in", message: "You haven't clocked in for today's shift." });
       return;
     }
     setConfirmDialog({
       open: true,
       title: "Clock Out",
-      description: "Are you sure you want to sign out for today?",
+      description: "Are you sure you want to clock out for today?",
       action: () => {
-        const signOut = new Date();
-        const totalHours = (signOut.getTime() - todayAttendance.signInTime!.getTime()) / (1000 * 60 * 60);
-        setAttendance(
-          attendance.map((a) =>
-            a.id === todayAttendance.id
-              ? { ...a, signOutTime: signOut, totalHours: Math.round(totalHours * 100) / 100 }
-              : a
-          )
-        );
-        setToast({ open: true, type: "success", title: "Clocked Out", message: `Signed out at ${signOut.toLocaleTimeString()}` });
+        clockOut.mutate(todayShift.id, {
+          onSuccess: () =>
+            setToast({ open: true, type: "success", title: "Clocked out", message: `Signed out at ${new Date().toLocaleTimeString()}` }),
+          onError: (e: Error) =>
+            setToast({ open: true, type: "error", title: "Clock-out failed", message: e.message }),
+        });
       },
     });
   };
 
-  const formatTimeShort = (date: Date) => {
-    return date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
-  };
+  const formatTimeShort = (date: Date) =>
+    date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
 
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear();
@@ -210,36 +109,15 @@ const ShiftsPage = () => {
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
     const days: (Date | null)[] = [];
-
-    for (let i = 0; i < firstDay.getDay(); i++) {
-      days.push(null);
-    }
-
-    for (let i = 1; i <= lastDay.getDate(); i++) {
-      days.push(new Date(year, month, i));
-    }
-
+    for (let i = 0; i < firstDay.getDay(); i++) days.push(null);
+    for (let i = 1; i <= lastDay.getDate(); i++) days.push(new Date(year, month, i));
     return days;
   };
 
   const getShiftForDate = (date: Date | null) => {
     if (!date) return null;
-    return shifts.find(
-      (s) =>
-        s.date.getDate() === date.getDate() &&
-        s.date.getMonth() === date.getMonth() &&
-        s.date.getFullYear() === date.getFullYear()
-    );
-  };
-
-  const getAttendanceForDate = (date: Date | null) => {
-    if (!date) return null;
-    return attendance.find(
-      (a) =>
-        a.date.getDate() === date.getDate() &&
-        a.date.getMonth() === date.getMonth() &&
-        a.date.getFullYear() === date.getFullYear()
-    );
+    const ds = date.toISOString().split("T")[0];
+    return shifts.find((s) => s.date === ds) ?? null;
   };
 
   const navigateMonth = (direction: number) => {
@@ -250,7 +128,7 @@ const ShiftsPage = () => {
   const days = getDaysInMonth(currentDate);
   const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-  const getPositionColor = (position: string) => {
+  const getPositionColor = (position: string | null) => {
     switch (position) {
       case "Kitchen Staff":
         return "bg-primary/10 text-primary";
@@ -265,200 +143,15 @@ const ShiftsPage = () => {
     }
   };
 
-  const handleSwapRequest = () => {
-    if (!selectedTeammate) {
-      setToast({ open: true, type: "error", title: "Error", message: "Please select a teammate" });
-      return;
-    }
-    const teammate = mockTeamMembers.find(t => t.id === selectedTeammate);
-    setConfirmDialog({
-      open: true,
-      title: "Request Shift Swap",
-      description: `Request to swap this shift with ${teammate?.name}?`,
-      action: () => {
-        setShowSwapModal(false);
-        setSelectedTeammate("");
-        setToast({ open: true, type: "success", title: "Swap Requested", message: "Your shift swap request has been sent" });
-      }
-    });
-  };
-
-  const openEditAttendanceModal = (record: AttendanceRecord) => {
-    setEditingAttendance(record);
-    setEditSignIn(record.signInTime ? formatTimeInput(record.signInTime) : "");
-    setEditSignOut(record.signOutTime ? formatTimeInput(record.signOutTime) : "");
-    setShowEditAttendanceModal(true);
-  };
-
-  const formatTimeInput = (date: Date) => {
-    return date.toTimeString().slice(0, 5); // Returns "HH:MM"
-  };
-
-  const getPendingCorrectionForAttendance = (attendanceId: string) => {
-    return corrections.find(
-      (c) => c.attendanceId === attendanceId && c.status === "pending"
-    );
-  };
-
-  const handleSubmitCorrectionRequest = () => {
-    if (!editingAttendance) return;
-    if (!editReason.trim()) {
-      setToast({ open: true, type: "error", title: "Reason Required", message: "Please provide a reason for the correction" });
-      return;
-    }
-    
-    const signInDate = editSignIn ? new Date(editingAttendance.date) : null;
-    const signOutDate = editSignOut ? new Date(editingAttendance.date) : null;
-    
-    if (signInDate && editSignIn) {
-      const [hours, minutes] = editSignIn.split(":").map(Number);
-      signInDate.setHours(hours, minutes, 0);
-    }
-    
-    if (signOutDate && editSignOut) {
-      const [hours, minutes] = editSignOut.split(":").map(Number);
-      signOutDate.setHours(hours, minutes, 0);
-    }
-    
-    const newCorrection: AttendanceCorrection = {
-      id: `corr-${Date.now()}`,
-      attendanceId: editingAttendance.id,
-      requestedBy: "John Adeyemi", // Current user
-      requestedAt: new Date(),
-      originalSignIn: editingAttendance.signInTime,
-      originalSignOut: editingAttendance.signOutTime,
-      newSignIn: signInDate,
-      newSignOut: signOutDate,
-      reason: editReason.trim(),
-      status: "pending",
-    };
-    
-    setCorrections([newCorrection, ...corrections]);
-    setShowEditAttendanceModal(false);
-    setEditingAttendance(null);
-    setEditReason("");
-    setToast({ 
-      open: true, 
-      type: "info", 
-      title: "Correction Requested", 
-      message: "Your request has been sent to a manager for approval" 
-    });
-  };
-
-  const handleApproveCorrection = () => {
-    if (!selectedCorrection) return;
-    
-    // Find and update the attendance record
-    const attendanceRecord = attendance.find(a => a.id === selectedCorrection.attendanceId);
-    if (attendanceRecord) {
-      let totalHours: number | null = null;
-      if (selectedCorrection.newSignIn && selectedCorrection.newSignOut) {
-        totalHours = Math.round(((selectedCorrection.newSignOut.getTime() - selectedCorrection.newSignIn.getTime()) / (1000 * 60 * 60)) * 100) / 100;
-      }
-      
-      setAttendance(
-        attendance.map((a) =>
-          a.id === selectedCorrection.attendanceId
-            ? { ...a, signInTime: selectedCorrection.newSignIn, signOutTime: selectedCorrection.newSignOut, totalHours }
-            : a
-        )
-      );
-    }
-    
-    // Update correction status
-    setCorrections(
-      corrections.map((c) =>
-        c.id === selectedCorrection.id
-          ? { 
-              ...c, 
-              status: "approved" as const, 
-              reviewedBy: currentUserName, 
-              reviewedAt: new Date(),
-              reviewNotes: reviewNotes.trim() || undefined
-            }
-          : c
-      )
-    );
-    
-    setShowReviewModal(false);
-    setSelectedCorrection(null);
-    setReviewNotes("");
-    setToast({ open: true, type: "success", title: "Correction Approved", message: "Attendance has been updated" });
-  };
-
-  const handleRejectCorrection = () => {
-    if (!selectedCorrection) return;
-    
-    setCorrections(
-      corrections.map((c) =>
-        c.id === selectedCorrection.id
-          ? { 
-              ...c, 
-              status: "rejected" as const, 
-              reviewedBy: currentUserName, 
-              reviewedAt: new Date(),
-              reviewNotes: reviewNotes.trim() || undefined
-            }
-          : c
-      )
-    );
-    
-    setShowReviewModal(false);
-    setSelectedCorrection(null);
-    setReviewNotes("");
-    setToast({ open: true, type: "warning", title: "Correction Rejected", message: "The correction request has been denied" });
-  };
-
-  const openReviewModal = (correction: AttendanceCorrection) => {
-    setSelectedCorrection(correction);
-    setReviewNotes("");
-    setShowReviewModal(true);
-  };
-
-  const pendingCorrectionsCount = corrections.filter(c => c.status === "pending").length;
-
-  const handleSaveAttendance = () => {
-    if (!editingAttendance) return;
-    
-    const signInDate = editSignIn ? new Date(editingAttendance.date) : null;
-    const signOutDate = editSignOut ? new Date(editingAttendance.date) : null;
-    
-    if (signInDate && editSignIn) {
-      const [hours, minutes] = editSignIn.split(":").map(Number);
-      signInDate.setHours(hours, minutes, 0);
-    }
-    
-    if (signOutDate && editSignOut) {
-      const [hours, minutes] = editSignOut.split(":").map(Number);
-      signOutDate.setHours(hours, minutes, 0);
-    }
-    
-    let totalHours: number | null = null;
-    if (signInDate && signOutDate) {
-      totalHours = Math.round(((signOutDate.getTime() - signInDate.getTime()) / (1000 * 60 * 60)) * 100) / 100;
-    }
-    
-    setAttendance(
-      attendance.map((a) =>
-        a.id === editingAttendance.id
-          ? { ...a, signInTime: signInDate, signOutTime: signOutDate, totalHours }
-          : a
-      )
-    );
-    
-    setShowEditAttendanceModal(false);
-    setEditingAttendance(null);
-    setToast({ open: true, type: "success", title: "Attendance Updated", message: "Timestamps have been corrected" });
-  };
+  const past = shifts.filter((s) => s.actualClockIn).sort((a, b) => (a.date > b.date ? -1 : 1));
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <header className="bg-card border-b border-border sticky top-0 z-50">
         <div className="px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-muted rounded-xl transition-colors">
+              <button onClick={() => navigate("/dashboard")} className="p-2 hover:bg-muted rounded-xl transition-colors">
                 <ArrowLeft className="w-5 h-5 text-foreground" />
               </button>
               <div className="flex items-center gap-3">
@@ -481,44 +174,52 @@ const ShiftsPage = () => {
         <div className="bg-card border border-border rounded-2xl p-4 mb-6">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                isClockedIn ? "bg-status-success/10" : "bg-secondary"
-              }`}>
+              <div
+                className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                  isClockedIn ? "bg-status-success/10" : "bg-secondary"
+                }`}
+              >
                 <Clock className={`w-6 h-6 ${isClockedIn ? "text-status-success" : "text-muted-foreground"}`} />
               </div>
               <div>
                 <h3 className="font-semibold text-foreground">
-                  {isClockedIn ? "Currently Working" : "Not Clocked In"}
+                  {isClockedIn ? "Currently Working" : todayShift ? "Not Clocked In" : "No Shift Today"}
                 </h3>
-                {todayAttendance?.signInTime && (
+                {todayShift?.actualClockIn && (
                   <p className="text-sm text-muted-foreground">
-                    Signed in at {formatTimeShort(todayAttendance.signInTime)}
-                    {todayAttendance.signOutTime && ` • Out at ${formatTimeShort(todayAttendance.signOutTime)}`}
+                    Signed in at {formatTimeShort(new Date(todayShift.actualClockIn))}
+                    {todayShift.actualClockOut && ` • Out at ${formatTimeShort(new Date(todayShift.actualClockOut))}`}
                   </p>
                 )}
               </div>
             </div>
             <div className="flex gap-2 w-full sm:w-auto">
-              {!todayAttendance ? (
-                <Button onClick={handleClockIn} className="rounded-xl flex-1 sm:flex-none">
+              {todayShift && !todayShift.actualClockIn && (
+                <Button onClick={handleClockIn} disabled={clockIn.isPending} className="rounded-xl flex-1 sm:flex-none">
                   <LogIn className="w-4 h-4 mr-2" />
                   Clock In
                 </Button>
-              ) : !todayAttendance.signOutTime ? (
-                <Button onClick={handleClockOut} variant="outline" className="rounded-xl flex-1 sm:flex-none border-status-warning text-status-warning hover:bg-status-warning/10">
+              )}
+              {todayShift?.actualClockIn && !todayShift.actualClockOut && (
+                <Button
+                  onClick={handleClockOut}
+                  disabled={clockOut.isPending}
+                  variant="outline"
+                  className="rounded-xl flex-1 sm:flex-none border-status-warning text-status-warning hover:bg-status-warning/10"
+                >
                   <LogOut className="w-4 h-4 mr-2" />
                   Clock Out
                 </Button>
-              ) : (
+              )}
+              {todayShift?.actualClockIn && todayShift.actualClockOut && (
                 <Badge className="bg-status-success/10 text-status-success px-4 py-2">
-                  Shift Complete • {todayAttendance.totalHours?.toFixed(1)}h
+                  Shift Complete
                 </Badge>
               )}
             </div>
           </div>
         </div>
 
-        {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
           <TabsList className="bg-secondary/50 p-1 rounded-xl">
             <TabsTrigger value="calendar" className="rounded-lg data-[state=active]:bg-card">
@@ -529,21 +230,9 @@ const ShiftsPage = () => {
               <Clock className="w-4 h-4 mr-1" />
               Attendance
             </TabsTrigger>
-            {currentUserRole === "manager" && (
-              <TabsTrigger value="approvals" className="rounded-lg data-[state=active]:bg-card relative">
-                <ShieldCheck className="w-4 h-4 mr-1" />
-                Approvals
-                {pendingCorrectionsCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-destructive text-destructive-foreground text-xs rounded-full flex items-center justify-center">
-                    {pendingCorrectionsCount}
-                  </span>
-                )}
-              </TabsTrigger>
-            )}
           </TabsList>
 
           <TabsContent value="calendar" className="mt-6">
-            {/* Month Navigation */}
             <div className="flex items-center justify-between mb-6">
               <Button variant="outline" size="icon" onClick={() => navigateMonth(-1)} className="rounded-xl">
                 <ChevronLeft className="w-4 h-4 text-foreground" />
@@ -557,10 +246,8 @@ const ShiftsPage = () => {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Calendar Grid */}
               <div className="lg:col-span-2">
                 <div className="bg-card border border-border rounded-2xl overflow-hidden">
-                  {/* Week Days Header */}
                   <div className="grid grid-cols-7 bg-secondary/50">
                     {weekDays.map((day) => (
                       <div key={day} className="p-3 text-center text-sm font-medium text-muted-foreground">
@@ -568,16 +255,11 @@ const ShiftsPage = () => {
                       </div>
                     ))}
                   </div>
-
-                  {/* Days Grid */}
                   <div className="grid grid-cols-7">
                     {days.map((date, idx) => {
                       const shift = getShiftForDate(date);
                       const isToday =
-                        date &&
-                        date.getDate() === new Date().getDate() &&
-                        date.getMonth() === new Date().getMonth() &&
-                        date.getFullYear() === new Date().getFullYear();
+                        date && date.toISOString().split("T")[0] === todayStr;
                       const isSelected = selectedShift && shift?.id === selectedShift.id;
 
                       return (
@@ -599,8 +281,8 @@ const ShiftsPage = () => {
                                 {date.getDate()}
                               </span>
                               {shift && (
-                                <div className={`mt-1 p-1.5 rounded-lg text-xs ${getPositionColor(shift.position)}`}>
-                                  <p className="font-medium truncate">{shift.position}</p>
+                                <div className={`mt-1 p-1.5 rounded-lg text-xs ${getPositionColor(shift.roleName)}`}>
+                                  <p className="font-medium truncate">{shift.roleName ?? "Staff"}</p>
                                   <p className="opacity-70 hidden sm:block">
                                     {shift.startTime} - {shift.endTime}
                                   </p>
@@ -613,40 +295,30 @@ const ShiftsPage = () => {
                     })}
                   </div>
                 </div>
-
-                {/* Legend */}
-                <div className="flex flex-wrap gap-3 mt-4">
-                  {["Kitchen Staff", "Waiter", "Cashier", "Delivery Rider"].map((position) => (
-                    <div key={position} className="flex items-center gap-2">
-                      <div className={`w-3 h-3 rounded ${getPositionColor(position).replace('text-', 'bg-').replace('/10', '')}`} />
-                      <span className="text-sm text-muted-foreground">{position}</span>
-                    </div>
-                  ))}
-                </div>
+                {isLoading && (
+                  <p className="text-center text-sm text-muted-foreground mt-3">Loading shifts...</p>
+                )}
               </div>
 
-              {/* Shift Details Panel */}
               <div className="lg:col-span-1">
                 <div className="bg-card border border-border rounded-2xl p-5 sticky top-24">
                   <h3 className="text-lg font-semibold text-foreground mb-4">Shift Details</h3>
-                  
                   {selectedShift ? (
                     <div className="space-y-4">
                       <div className="flex items-center gap-3">
-                        <div className={`w-12 h-12 rounded-xl ${getPositionColor(selectedShift.position)} flex items-center justify-center`}>
+                        <div className={`w-12 h-12 rounded-xl ${getPositionColor(selectedShift.roleName)} flex items-center justify-center`}>
                           <User className="w-6 h-6" />
                         </div>
                         <div>
-                          <h4 className="font-semibold text-foreground">{selectedShift.position}</h4>
-                          <p className="text-sm text-muted-foreground">{selectedShift.location}</p>
+                          <h4 className="font-semibold text-foreground">{selectedShift.roleName ?? "Staff"}</h4>
+                          <p className="text-sm text-muted-foreground">Status: {selectedShift.status}</p>
                         </div>
                       </div>
-
                       <div className="bg-secondary/50 rounded-xl p-4 space-y-3">
                         <div className="flex items-center gap-2">
                           <CalendarIcon className="w-4 h-4 text-foreground" />
                           <span className="text-foreground">
-                            {selectedShift.date.toLocaleDateString("en-US", {
+                            {new Date(selectedShift.date).toLocaleDateString("en-US", {
                               weekday: "long",
                               month: "long",
                               day: "numeric",
@@ -658,100 +330,31 @@ const ShiftsPage = () => {
                           <span className="text-foreground">
                             {selectedShift.startTime} - {selectedShift.endTime}
                           </span>
-                          <Badge variant="outline" className="ml-auto">8 hours</Badge>
                         </div>
                       </div>
-
                       {selectedShift.notes && (
                         <div className="bg-status-warning/10 border border-status-warning/30 rounded-xl p-3">
                           <p className="text-sm text-foreground">{selectedShift.notes}</p>
                         </div>
                       )}
-
-                      {/* Attendance Record for this Shift */}
-                      {(() => {
-                        const shiftAttendance = getAttendanceForDate(selectedShift.date);
-                        const pendingCorrection = shiftAttendance ? getPendingCorrectionForAttendance(shiftAttendance.id) : null;
-                        return (
-                          <div className="bg-secondary/30 rounded-xl p-4 space-y-3">
-                            <div className="flex items-center justify-between">
-                              <h5 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                                <Clock className="w-4 h-4" />
-                                Attendance Log
-                              </h5>
-                              {shiftAttendance && !pendingCorrection && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-7 px-2 text-xs"
-                                  onClick={() => openEditAttendanceModal(shiftAttendance)}
-                                >
-                                  <Pencil className="w-3 h-3 mr-1" />
-                                  Edit
-                                </Button>
-                              )}
-                            </div>
-                            {pendingCorrection && (
-                              <Badge className="w-full justify-center bg-status-warning/10 text-status-warning border border-status-warning/30">
-                                <AlertCircle className="w-3 h-3 mr-1" />
-                                Correction Pending Approval
-                              </Badge>
-                            )}
-                            {shiftAttendance ? (
-                              <div className="space-y-2">
-                                <div className="flex items-center justify-between text-sm">
-                                  <div className="flex items-center gap-2 text-status-success">
-                                    <LogIn className="w-3.5 h-3.5" />
-                                    <span>Sign In</span>
-                                  </div>
-                                  <span className="font-medium text-foreground">
-                                    {shiftAttendance.signInTime 
-                                      ? formatTimeShort(shiftAttendance.signInTime) 
-                                      : "—"}
-                                  </span>
-                                </div>
-                                <div className="flex items-center justify-between text-sm">
-                                  <div className="flex items-center gap-2 text-status-warning">
-                                    <LogOut className="w-3.5 h-3.5" />
-                                    <span>Sign Out</span>
-                                  </div>
-                                  <span className="font-medium text-foreground">
-                                    {shiftAttendance.signOutTime 
-                                      ? formatTimeShort(shiftAttendance.signOutTime) 
-                                      : "—"}
-                                  </span>
-                                </div>
-                                {shiftAttendance.totalHours !== null && (
-                                  <div className="pt-2 border-t border-border flex items-center justify-between text-sm">
-                                    <span className="text-muted-foreground">Total Hours</span>
-                                    <Badge className="bg-status-success/10 text-status-success">
-                                      {shiftAttendance.totalHours.toFixed(1)}h
-                                    </Badge>
-                                  </div>
-                                )}
-                                {!shiftAttendance.signOutTime && shiftAttendance.signInTime && (
-                                  <Badge className="w-full justify-center bg-status-info/10 text-status-info">
-                                    Currently Working
-                                  </Badge>
-                                )}
-                              </div>
-                            ) : (
-                              <p className="text-sm text-muted-foreground text-center py-2">
-                                No attendance recorded
-                              </p>
-                            )}
+                      {selectedShift.actualClockIn && (
+                        <div className="bg-secondary/30 rounded-xl p-4 space-y-2">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Clocked in</span>
+                            <span className="font-medium text-foreground">
+                              {formatTimeShort(new Date(selectedShift.actualClockIn))}
+                            </span>
                           </div>
-                        );
-                      })()}
-
-                      <Button 
-                        variant="outline" 
-                        className="w-full rounded-xl"
-                        onClick={() => setShowSwapModal(true)}
-                      >
-                        <ArrowRightLeft className="w-4 h-4 mr-2 text-foreground" />
-                        Request Shift Swap
-                      </Button>
+                          {selectedShift.actualClockOut && (
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-muted-foreground">Clocked out</span>
+                              <span className="font-medium text-foreground">
+                                {formatTimeShort(new Date(selectedShift.actualClockOut))}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="text-center py-8 text-muted-foreground">
@@ -774,63 +377,42 @@ const ShiftsPage = () => {
                       <th className="p-4 text-left text-sm font-medium text-muted-foreground">Position</th>
                       <th className="p-4 text-left text-sm font-medium text-muted-foreground">Sign In</th>
                       <th className="p-4 text-left text-sm font-medium text-muted-foreground">Sign Out</th>
-                      <th className="p-4 text-left text-sm font-medium text-muted-foreground">Total Hours</th>
                       <th className="p-4 text-left text-sm font-medium text-muted-foreground">Status</th>
-                      <th className="p-4 text-left text-sm font-medium text-muted-foreground">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {attendance.map((record) => (
-                      <tr key={record.id} className="border-t border-border">
+                    {past.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="p-6 text-center text-sm text-muted-foreground">
+                          No clock-in records yet for this month.
+                        </td>
+                      </tr>
+                    )}
+                    {past.map((s) => (
+                      <tr key={s.id} className="border-t border-border">
                         <td className="p-4 font-medium text-foreground">
-                          {record.date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                          {new Date(s.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
                         </td>
                         <td className="p-4">
-                          <Badge variant="outline" className={`rounded-lg ${getPositionColor(record.position)}`}>
-                            {record.position}
+                          <Badge variant="outline" className={`rounded-lg ${getPositionColor(s.roleName)}`}>
+                            {s.roleName ?? "Staff"}
                           </Badge>
                         </td>
                         <td className="p-4 text-foreground">
-                          {record.signInTime ? formatTimeShort(record.signInTime) : "-"}
+                          {s.actualClockIn ? formatTimeShort(new Date(s.actualClockIn)) : "-"}
                         </td>
                         <td className="p-4 text-foreground">
-                          {record.signOutTime ? formatTimeShort(record.signOutTime) : "-"}
-                        </td>
-                        <td className="p-4 text-foreground font-medium">
-                          {record.totalHours ? `${record.totalHours.toFixed(1)}h` : "-"}
+                          {s.actualClockOut ? formatTimeShort(new Date(s.actualClockOut)) : "-"}
                         </td>
                         <td className="p-4">
-                          {record.signOutTime ? (
-                            <Badge className="bg-status-success/10 text-status-success">Complete</Badge>
-                          ) : record.signInTime ? (
-                            <Badge className="bg-status-warning/10 text-status-warning">In Progress</Badge>
+                          {s.actualClockOut ? (
+                            <Badge className="bg-status-success/10 text-status-success">
+                              <CheckCircle className="w-3 h-3 mr-1" />
+                              Complete
+                            </Badge>
                           ) : (
-                            <Badge className="bg-muted text-muted-foreground">-</Badge>
+                            <Badge className="bg-status-warning/10 text-status-warning">In Progress</Badge>
                           )}
-                        </td>
-                        <td className="p-4">
-                          {(() => {
-                            const pendingCorrection = getPendingCorrectionForAttendance(record.id);
-                            if (pendingCorrection) {
-                              return (
-                                <Badge className="bg-status-warning/10 text-status-warning">
-                                  <AlertCircle className="w-3 h-3 mr-1" />
-                                  Pending Approval
-                                </Badge>
-                              );
-                            }
-                            return (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 px-2"
-                                onClick={() => openEditAttendanceModal(record)}
-                              >
-                                <Pencil className="w-4 h-4 mr-1" />
-                                Edit
-                              </Button>
-                            );
-                          })()}
                         </td>
                       </tr>
                     ))}
@@ -839,340 +421,32 @@ const ShiftsPage = () => {
               </div>
             </div>
           </TabsContent>
-
-          {/* Manager Approvals Tab */}
-          {currentUserRole === "manager" && (
-            <TabsContent value="approvals" className="mt-6">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold text-foreground">Pending Correction Requests</h3>
-                  <Badge variant="outline" className="px-3">
-                    {pendingCorrectionsCount} pending
-                  </Badge>
-                </div>
-                
-                {corrections.length === 0 ? (
-                  <div className="bg-card border border-border rounded-2xl p-8 text-center">
-                    <ShieldCheck className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
-                    <p className="text-muted-foreground">No correction requests</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {corrections.map((correction) => {
-                      const attendanceRecord = attendance.find(a => a.id === correction.attendanceId);
-                      return (
-                        <div 
-                          key={correction.id} 
-                          className={`bg-card border rounded-2xl p-4 ${
-                            correction.status === "pending" 
-                              ? "border-status-warning" 
-                              : correction.status === "approved" 
-                                ? "border-status-success/50" 
-                                : "border-destructive/50"
-                          }`}
-                        >
-                          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                            <div className="flex-1 space-y-3">
-                              <div className="flex items-center gap-2">
-                                <User className="w-4 h-4 text-muted-foreground" />
-                                <span className="font-medium text-foreground">{correction.requestedBy}</span>
-                                <Badge 
-                                  variant="outline" 
-                                  className={`text-xs ${
-                                    correction.status === "pending"
-                                      ? "bg-status-warning/10 text-status-warning border-status-warning"
-                                      : correction.status === "approved"
-                                        ? "bg-status-success/10 text-status-success border-status-success"
-                                        : "bg-destructive/10 text-destructive border-destructive"
-                                  }`}
-                                >
-                                  {correction.status === "pending" && <AlertCircle className="w-3 h-3 mr-1" />}
-                                  {correction.status === "approved" && <CheckCircle className="w-3 h-3 mr-1" />}
-                                  {correction.status === "rejected" && <XCircle className="w-3 h-3 mr-1" />}
-                                  {correction.status.charAt(0).toUpperCase() + correction.status.slice(1)}
-                                </Badge>
-                              </div>
-                              
-                              <div className="text-sm text-muted-foreground">
-                                Requested {correction.requestedAt.toLocaleDateString("en-US", { 
-                                  weekday: "short", 
-                                  month: "short", 
-                                  day: "numeric",
-                                  hour: "2-digit",
-                                  minute: "2-digit"
-                                })}
-                              </div>
-                              
-                              <div className="bg-secondary/50 rounded-xl p-3 space-y-2">
-                                <div className="flex items-center gap-4 text-sm">
-                                  <div>
-                                    <span className="text-muted-foreground">Original: </span>
-                                    <span className="text-foreground">
-                                      {correction.originalSignIn ? formatTimeShort(correction.originalSignIn) : "—"} 
-                                      {" → "}
-                                      {correction.originalSignOut ? formatTimeShort(correction.originalSignOut) : "—"}
-                                    </span>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-4 text-sm">
-                                  <div>
-                                    <span className="text-muted-foreground">Requested: </span>
-                                    <span className="text-status-info font-medium">
-                                      {correction.newSignIn ? formatTimeShort(correction.newSignIn) : "—"} 
-                                      {" → "}
-                                      {correction.newSignOut ? formatTimeShort(correction.newSignOut) : "—"}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                              
-                              <div className="bg-muted/50 rounded-xl p-3">
-                                <p className="text-sm text-foreground">
-                                  <span className="font-medium">Reason: </span>
-                                  {correction.reason}
-                                </p>
-                              </div>
-                              
-                              {correction.reviewedBy && (
-                                <div className="text-xs text-muted-foreground">
-                                  Reviewed by {correction.reviewedBy} on {correction.reviewedAt?.toLocaleDateString()}
-                                  {correction.reviewNotes && (
-                                    <p className="mt-1 italic">"{correction.reviewNotes}"</p>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                            
-                            {correction.status === "pending" && (
-                              <div className="flex gap-2 sm:flex-col">
-                                <Button 
-                                  size="sm" 
-                                  className="rounded-xl bg-status-success hover:bg-status-success/90"
-                                  onClick={() => openReviewModal(correction)}
-                                >
-                                  <CheckCircle className="w-4 h-4 mr-1" />
-                                  Review
-                                </Button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </TabsContent>
-          )}
         </Tabs>
       </main>
 
-      {/* Swap Modal */}
-      <Dialog open={showSwapModal} onOpenChange={setShowSwapModal}>
-        <DialogContent className="rounded-2xl">
-          <DialogHeader>
-            <DialogTitle>Request Shift Swap</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            {selectedShift && (
-              <div className="bg-secondary/50 rounded-xl p-3 text-sm">
-                <p className="font-medium text-foreground">{selectedShift.position}</p>
-                <p className="text-muted-foreground">
-                  {selectedShift.date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} • {selectedShift.startTime} - {selectedShift.endTime}
-                </p>
-              </div>
-            )}
-            <Select value={selectedTeammate} onValueChange={setSelectedTeammate}>
-              <SelectTrigger className="rounded-xl">
-                <SelectValue placeholder="Select teammate to swap with" />
-              </SelectTrigger>
-              <SelectContent>
-                {mockTeamMembers.map((member) => (
-                  <SelectItem key={member.id} value={member.id}>
-                    {member.name} ({member.position})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setShowSwapModal(false)}>
-              Cancel
-            </Button>
-            <Button className="flex-1 rounded-xl" onClick={handleSwapRequest}>
-              Send Request
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Attendance Modal */}
-      <Dialog open={showEditAttendanceModal} onOpenChange={setShowEditAttendanceModal}>
-        <DialogContent className="rounded-2xl max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Request Attendance Correction</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            {editingAttendance && (
-              <div className="bg-secondary/50 rounded-xl p-3 text-sm">
-                <p className="font-medium text-foreground">{editingAttendance.position}</p>
-                <p className="text-muted-foreground">
-                  {editingAttendance.date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
-                </p>
-              </div>
-            )}
-            
-            <div className="bg-status-info/10 border border-status-info/30 rounded-xl p-3">
-              <p className="text-xs text-status-info flex items-center gap-1">
-                <AlertCircle className="w-3.5 h-3.5" />
-                Changes require manager approval
-              </p>
-            </div>
-            
-            <div>
-              <label className="text-sm font-medium text-foreground mb-2 block">Sign In Time</label>
-              <Input
-                type="time"
-                value={editSignIn}
-                onChange={(e) => setEditSignIn(e.target.value)}
-                className="rounded-xl"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-foreground mb-2 block">Sign Out Time</label>
-              <Input
-                type="time"
-                value={editSignOut}
-                onChange={(e) => setEditSignOut(e.target.value)}
-                className="rounded-xl"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-foreground mb-2 block">Reason for Correction *</label>
-              <Input
-                type="text"
-                placeholder="e.g., Forgot to clock in on time"
-                value={editReason}
-                onChange={(e) => setEditReason(e.target.value)}
-                className="rounded-xl"
-              />
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setShowEditAttendanceModal(false)}>
-              Cancel
-            </Button>
-            <Button className="flex-1 rounded-xl" onClick={handleSubmitCorrectionRequest}>
-              Submit Request
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Manager Review Modal */}
-      <Dialog open={showReviewModal} onOpenChange={setShowReviewModal}>
-        <DialogContent className="rounded-2xl max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <ShieldCheck className="w-5 h-5 text-primary" />
-              Review Correction Request
-            </DialogTitle>
-          </DialogHeader>
-          {selectedCorrection && (
-            <div className="space-y-4 py-4">
-              <div className="bg-secondary/50 rounded-xl p-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <User className="w-4 h-4 text-muted-foreground" />
-                  <span className="font-medium text-foreground">{selectedCorrection.requestedBy}</span>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Requested {selectedCorrection.requestedAt.toLocaleDateString("en-US", { 
-                    weekday: "short", 
-                    month: "short", 
-                    day: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit"
-                  })}
-                </p>
-              </div>
-              
-              <div className="space-y-2">
-                <h4 className="text-sm font-medium text-foreground">Time Changes</h4>
-                <div className="bg-muted/50 rounded-xl p-3 space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Original Sign In:</span>
-                    <span className="text-foreground">{selectedCorrection.originalSignIn ? formatTimeShort(selectedCorrection.originalSignIn) : "—"}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Requested Sign In:</span>
-                    <span className="text-status-info font-medium">{selectedCorrection.newSignIn ? formatTimeShort(selectedCorrection.newSignIn) : "—"}</span>
-                  </div>
-                  <div className="border-t border-border my-2" />
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Original Sign Out:</span>
-                    <span className="text-foreground">{selectedCorrection.originalSignOut ? formatTimeShort(selectedCorrection.originalSignOut) : "—"}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Requested Sign Out:</span>
-                    <span className="text-status-info font-medium">{selectedCorrection.newSignOut ? formatTimeShort(selectedCorrection.newSignOut) : "—"}</span>
-                  </div>
-                </div>
-              </div>
-              
-              <div>
-                <h4 className="text-sm font-medium text-foreground mb-2">Reason Given</h4>
-                <div className="bg-muted/50 rounded-xl p-3">
-                  <p className="text-sm text-foreground">{selectedCorrection.reason}</p>
-                </div>
-              </div>
-              
-              <div>
-                <label className="text-sm font-medium text-foreground mb-2 block">Review Notes (Optional)</label>
-                <Input
-                  type="text"
-                  placeholder="Add any notes about this decision..."
-                  value={reviewNotes}
-                  onChange={(e) => setReviewNotes(e.target.value)}
-                  className="rounded-xl"
-                />
-              </div>
-            </div>
-          )}
-          <div className="flex gap-2">
-            <Button 
-              variant="outline" 
-              className="flex-1 rounded-xl border-destructive text-destructive hover:bg-destructive/10" 
-              onClick={handleRejectCorrection}
-            >
-              <XCircle className="w-4 h-4 mr-1" />
-              Reject
-            </Button>
-            <Button 
-              className="flex-1 rounded-xl bg-status-success hover:bg-status-success/90" 
-              onClick={handleApproveCorrection}
-            >
-              <CheckCircle className="w-4 h-4 mr-1" />
-              Approve
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <ConfirmDialog 
-        open={confirmDialog.open} 
-        onOpenChange={(open) => setConfirmDialog({ ...confirmDialog, open })} 
-        title={confirmDialog.title} 
-        description={confirmDialog.description} 
-        onConfirm={() => { confirmDialog.action(); setConfirmDialog({ ...confirmDialog, open: false }); }} 
+      <ConfirmDialog
+        open={confirmDialog.open}
+        onOpenChange={(open) => setConfirmDialog({ ...confirmDialog, open })}
+        title={confirmDialog.title}
+        description={confirmDialog.description}
+        onConfirm={() => {
+          confirmDialog.action();
+          setConfirmDialog({ ...confirmDialog, open: false });
+        }}
       />
-      <ToastNotification 
-        open={toast.open} 
-        onClose={() => setToast({ ...toast, open: false })} 
-        type={toast.type} 
-        title={toast.title} 
-        message={toast.message} 
+      <ToastNotification
+        open={toast.open}
+        onClose={() => setToast({ ...toast, open: false })}
+        type={toast.type}
+        title={toast.title}
+        message={toast.message}
       />
-      <ActivityLog open={showActivityLog} onClose={() => setShowActivityLog(false)} pageName="My Shifts" />
+      <ActivityLog
+        open={showActivityLog}
+        onClose={() => setShowActivityLog(false)}
+        pageName="My Shifts"
+        resourceType="shift"
+      />
     </div>
   );
 };

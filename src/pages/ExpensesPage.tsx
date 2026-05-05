@@ -34,6 +34,8 @@ import ToastNotification from "@/components/ToastNotification";
 import ActivityLogButton from "@/components/ActivityLogButton";
 import ActivityLog from "@/components/ActivityLog";
 import { DataTable } from "@/components/DataTable";
+import { useCategories } from "@/hooks/useCategories";
+import CategoryLoadError from "@/components/CategoryLoadError";
 
 interface ExpenseRequest {
   id: string;
@@ -48,17 +50,6 @@ interface ExpenseRequest {
   approvedAt?: Date;
   rejectionReason?: string;
 }
-
-const expenseCategories = [
-  "Supplies",
-  "Utilities",
-  "Maintenance",
-  "Transport",
-  "Food & Beverages",
-  "Marketing",
-  "Equipment",
-  "Miscellaneous",
-];
 
 const mockExpenses: ExpenseRequest[] = [
   {
@@ -108,6 +99,12 @@ const mockExpenses: ExpenseRequest[] = [
 
 const ExpensesPage = () => {
   const navigate = useNavigate();
+  const {
+    data: expenseCategories = [],
+    isLoading: categoriesLoading,
+    isError: categoriesError,
+    refetch: refetchCategories,
+  } = useCategories("expense");
   const [expenses, setExpenses] = useState<ExpenseRequest[]>(mockExpenses);
   const [activeTab, setActiveTab] = useState("pending");
   const [showAddModal, setShowAddModal] = useState(false);
@@ -505,21 +502,28 @@ const ExpensesPage = () => {
               <label className="text-sm font-medium text-foreground mb-2 block">
                 Category *
               </label>
-              <Select
-                value={newExpense.category}
-                onValueChange={(v) => setNewExpense({ ...newExpense, category: v })}
-              >
-                <SelectTrigger className="rounded-xl">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {expenseCategories.map((cat) => (
-                    <SelectItem key={cat} value={cat}>
-                      {cat}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {categoriesError ? (
+                <CategoryLoadError onRetry={() => refetchCategories()} />
+              ) : (
+                <Select
+                  value={newExpense.category}
+                  onValueChange={(v) => setNewExpense({ ...newExpense, category: v })}
+                  disabled={categoriesLoading}
+                >
+                  <SelectTrigger className="rounded-xl">
+                    <SelectValue
+                      placeholder={categoriesLoading ? "Loading…" : "Select category"}
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {expenseCategories.map((cat) => (
+                      <SelectItem key={cat.id} value={cat.name}>
+                        {cat.emoji ? `${cat.emoji} ${cat.name}` : cat.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
             <div>
               <label className="text-sm font-medium text-foreground mb-2 block">
