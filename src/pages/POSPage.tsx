@@ -65,6 +65,7 @@ import StaffFinancePanel from "@/components/StaffFinancePanel";
 import { useBeepSound } from "@/hooks/useBeepSound";
 import { useCategories } from "@/hooks/useCategories";
 import { useCreateOrder, useOrders } from "@/hooks/useOrders";
+import { workstationAuth } from "@/services/api";
 import CategoryLoadError from "@/components/CategoryLoadError";
 
 interface Variation {
@@ -250,9 +251,10 @@ const POSPage = () => {
   const [orderType, setOrderType] = useState<"dine-in" | "takeaway" | "delivery">("dine-in");
   const [customerName, setCustomerName] = useState("");
 
-  // Mock staff data - in real app would come from auth
-  const currentStaffId = "1";
-  const isManager = true; // Would be determined by role
+  // Manager-only UI affordances. Permissions live on the staff JWT payload.
+  const sessionStaff = workstationAuth.getStaff();
+  const currentStaffId = sessionStaff?.id ?? "";
+  const isManager = !!sessionStaff?.permissions?.includes("manage_orders");
 
   const virtualAccount = {
     bank: "Wema Bank",

@@ -1,6 +1,20 @@
 // Mirrors backend ShiftResponseDto.
 export type ShiftStatus = 'scheduled' | 'in-progress' | 'completed' | 'missed' | 'cancelled';
 
+export interface ChecklistItem {
+  id: string;
+  task: string;
+  completed: boolean;
+  priority: 'high' | 'medium' | 'low';
+  completedAt?: string;
+}
+
+export interface ChecklistCategory {
+  id: string;
+  name: string;
+  items: ChecklistItem[];
+}
+
 export interface Shift {
   id: string;
   storeId: string;
@@ -16,6 +30,7 @@ export interface Shift {
   actualClockIn: string | null;
   actualClockOut: string | null;
   notes: string | null;
+  checklist: ChecklistCategory[] | null;
   createdAt: string;
   updatedAt: string;
 }

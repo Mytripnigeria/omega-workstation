@@ -1,7 +1,18 @@
 import { useState } from "react";
-import { ArrowUpRight, ArrowDownLeft, ArrowRight, Trash2, RotateCcw, ShoppingCart, Package, TrendingUp, TrendingDown, Filter } from "lucide-react";
+import {
+  ArrowUpRight,
+  ArrowDownLeft,
+  ArrowRight,
+  Trash2,
+  ShoppingCart,
+  Package,
+  TrendingUp,
+  TrendingDown,
+  Filter,
+  Wrench,
+  Repeat,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -10,186 +21,85 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DataTable } from "@/components/DataTable";
+import { workstationAuth } from "@/services/api";
+import { useMovements } from "@/hooks/useMovements";
+import type { IngredientMovement, MovementType } from "@/types/movement";
 
-interface MovementRecord {
-  id: string;
-  itemName: string;
-  itemId: string;
-  type: "inflow" | "outflow" | "sale" | "waste" | "return" | "order";
-  quantity: number;
-  unit: string;
-  previousQty: number;
-  newQty: number;
-  source?: string;
-  destination?: string;
-  reference?: string;
-  notes?: string;
-  timestamp: Date;
-  performedBy: string;
+interface InventoryMovementLogProps {
+  /** Optional: scope log to a single ingredient (used inside ItemDetailsModal). */
+  ingredientId?: string;
 }
 
-const mockMovements: MovementRecord[] = [
-  {
-    id: "mv1",
-    itemName: "Diced Tomatoes",
-    itemId: "1",
-    type: "inflow",
-    quantity: 15,
-    unit: "kg",
-    previousQty: 10,
-    newQty: 25,
-    source: "Store Room 1",
-    destination: "Prep Station",
-    timestamp: new Date(Date.now() - 30 * 60000),
-    performedBy: "John A.",
-  },
-  {
-    id: "mv2",
-    itemName: "Marinated Chicken",
-    itemId: "2",
-    type: "sale",
-    quantity: 4,
-    unit: "kg",
-    previousQty: 12,
-    newQty: 8,
-    reference: "Order #1234",
-    timestamp: new Date(Date.now() - 45 * 60000),
-    performedBy: "Kitchen",
-  },
-  {
-    id: "mv3",
-    itemName: "Sliced Onions",
-    itemId: "3",
-    type: "waste",
-    quantity: 2,
-    unit: "kg",
-    previousQty: 7,
-    newQty: 5,
-    notes: "Spoiled - not refrigerated properly",
-    timestamp: new Date(Date.now() - 60 * 60000),
-    performedBy: "Sarah O.",
-  },
-  {
-    id: "mv4",
-    itemName: "Prepped Rice",
-    itemId: "4",
-    type: "return",
-    quantity: 5,
-    unit: "kg",
-    previousQty: 15,
-    newQty: 10,
-    destination: "Store Room 2",
-    notes: "Excess preparation",
-    timestamp: new Date(Date.now() - 90 * 60000),
-    performedBy: "Mike B.",
-  },
-  {
-    id: "mv5",
-    itemName: "Diced Tomatoes",
-    itemId: "1",
-    type: "order",
-    quantity: 8,
-    unit: "kg",
-    previousQty: 25,
-    newQty: 17,
-    reference: "Order #1235",
-    timestamp: new Date(Date.now() - 120 * 60000),
-    performedBy: "Kitchen",
-  },
-  {
-    id: "mv6",
-    itemName: "Marinated Chicken",
-    itemId: "2",
-    type: "inflow",
-    quantity: 10,
-    unit: "kg",
-    previousQty: 2,
-    newQty: 12,
-    source: "Main Freezer",
-    destination: "Kitchen Chiller",
-    timestamp: new Date(Date.now() - 150 * 60000),
-    performedBy: "John A.",
-  },
-];
+const TYPE_LABELS: Record<MovementType, string> = {
+  intake: "Intake",
+  consumption: "Consumption",
+  waste: "Waste",
+  transfer: "Transfer",
+  correction: "Correction",
+};
 
-const movementTypes = [
-  { value: "all", label: "All Types" },
-  { value: "inflow", label: "Inflow" },
-  { value: "outflow", label: "Outflow" },
-  { value: "sale", label: "Sales" },
-  { value: "order", label: "Orders" },
-  { value: "waste", label: "Waste" },
-  { value: "return", label: "Returns" },
-];
+const ALL = "__all__";
 
-const InventoryMovementLog = () => {
-  const [movements] = useState<MovementRecord[]>(mockMovements);
-  const [typeFilter, setTypeFilter] = useState("all");
+const InventoryMovementLog = ({ ingredientId }: InventoryMovementLogProps) => {
+  const staff = workstationAuth.getStaff();
+  const [typeFilter, setTypeFilter] = useState<MovementType | typeof ALL>(ALL);
 
-  const filteredMovements = movements.filter(
-    (m) => typeFilter === "all" || m.type === typeFilter
-  );
+  const { data, isLoading } = useMovements({
+    storeId: staff?.storeId,
+    ingredientId,
+    type: typeFilter === ALL ? undefined : (typeFilter as MovementType),
+    limit: 100,
+  });
 
-  const getTypeConfig = (type: string) => {
+  const movements: IngredientMovement[] = data?.data ?? [];
+
+  const getTypeConfig = (type: MovementType) => {
     switch (type) {
-      case "inflow":
+      case "intake":
         return {
           icon: ArrowDownLeft,
-          label: "Inflow",
+          label: "Intake",
           color: "bg-status-success/10 text-status-success",
-          sign: "+",
         };
-      case "outflow":
-        return {
-          icon: ArrowUpRight,
-          label: "Outflow",
-          color: "bg-status-warning/10 text-status-warning",
-          sign: "-",
-        };
-      case "sale":
+      case "consumption":
         return {
           icon: ShoppingCart,
-          label: "Sale",
+          label: "Consumption",
           color: "bg-primary/10 text-primary",
-          sign: "-",
-        };
-      case "order":
-        return {
-          icon: Package,
-          label: "Order",
-          color: "bg-status-info/10 text-status-info",
-          sign: "-",
         };
       case "waste":
         return {
           icon: Trash2,
           label: "Waste",
           color: "bg-status-error/10 text-status-error",
-          sign: "-",
         };
-      case "return":
+      case "transfer":
         return {
-          icon: RotateCcw,
-          label: "Return",
+          icon: Repeat,
+          label: "Transfer",
           color: "bg-category-lavender/30 text-category-lavender",
-          sign: "-",
+        };
+      case "correction":
+        return {
+          icon: Wrench,
+          label: "Correction",
+          color: "bg-status-warning/10 text-status-warning",
         };
       default:
         return {
           icon: ArrowRight,
           label: type,
           color: "bg-secondary text-foreground",
-          sign: "",
         };
     }
   };
 
-  const formatTime = (date: Date) => {
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
+  const formatTime = (iso: string) => {
+    const date = new Date(iso);
+    const diffMs = Date.now() - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMins / 60);
-    
+    if (diffMins < 1) return "Just now";
     if (diffMins < 60) return `${diffMins}m ago`;
     if (diffHours < 24) return `${diffHours}h ago`;
     return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -197,27 +107,29 @@ const InventoryMovementLog = () => {
 
   const columns = [
     {
-      key: "timestamp",
+      key: "createdAt",
       label: "Time",
       sortable: true,
-      render: (item: MovementRecord) => (
-        <span className="text-muted-foreground text-sm">{formatTime(item.timestamp)}</span>
+      render: (m: IngredientMovement) => (
+        <span className="text-muted-foreground text-sm">{formatTime(m.createdAt)}</span>
       ),
     },
     {
-      key: "itemName",
+      key: "ingredientName",
       label: "Item",
       sortable: true,
-      render: (item: MovementRecord) => (
-        <span className="font-medium text-foreground">{item.itemName}</span>
+      render: (m: IngredientMovement) => (
+        <span className="font-medium text-foreground">
+          {m.ingredientName ?? "Ingredient"}
+        </span>
       ),
     },
     {
       key: "type",
       label: "Type",
       sortable: true,
-      render: (item: MovementRecord) => {
-        const config = getTypeConfig(item.type);
+      render: (m: IngredientMovement) => {
+        const config = getTypeConfig(m.type);
         const Icon = config.icon;
         return (
           <Badge className={`${config.color} rounded-lg flex items-center gap-1 w-fit`}>
@@ -231,18 +143,22 @@ const InventoryMovementLog = () => {
       key: "quantity",
       label: "Change",
       sortable: true,
-      render: (item: MovementRecord) => {
-        const config = getTypeConfig(item.type);
-        const isPositive = config.sign === "+";
+      render: (m: IngredientMovement) => {
+        const positive = m.quantity > 0;
         return (
           <div className="flex items-center gap-1">
-            {isPositive ? (
+            {positive ? (
               <TrendingUp className="w-4 h-4 text-status-success" />
             ) : (
               <TrendingDown className="w-4 h-4 text-status-error" />
             )}
-            <span className={`font-semibold ${isPositive ? "text-status-success" : "text-status-error"}`}>
-              {config.sign}{item.quantity} {item.unit}
+            <span
+              className={`font-semibold ${
+                positive ? "text-status-success" : "text-status-error"
+              }`}
+            >
+              {positive ? "+" : ""}
+              {m.quantity} {m.ingredientUnit ?? ""}
             </span>
           </div>
         );
@@ -251,52 +167,54 @@ const InventoryMovementLog = () => {
     {
       key: "balance",
       label: "Balance",
-      render: (item: MovementRecord) => (
+      render: (m: IngredientMovement) => (
         <div className="text-sm">
-          <span className="text-muted-foreground">{item.previousQty}</span>
+          <span className="text-muted-foreground">{m.previousStock}</span>
           <span className="mx-1 text-muted-foreground">→</span>
-          <span className="font-semibold text-foreground">{item.newQty} {item.unit}</span>
+          <span className="font-semibold text-foreground">
+            {m.newStock} {m.ingredientUnit ?? ""}
+          </span>
         </div>
       ),
     },
     {
       key: "details",
       label: "Details",
-      render: (item: MovementRecord) => (
+      render: (m: IngredientMovement) => (
         <div className="text-sm text-muted-foreground max-w-[200px]">
-          {item.source && item.destination && (
-            <span>{item.source} → {item.destination}</span>
+          {m.referenceType && m.referenceId && (
+            <span>
+              {m.referenceType} {m.referenceId.slice(0, 8)}
+            </span>
           )}
-          {item.reference && <span>{item.reference}</span>}
-          {item.notes && <span className="line-clamp-1">{item.notes}</span>}
-          {!item.source && !item.reference && !item.notes && "-"}
+          {m.reason && <span className="line-clamp-1">{m.reason}</span>}
+          {!m.referenceType && !m.reason && "—"}
         </div>
       ),
     },
     {
-      key: "performedBy",
+      key: "staffName",
       label: "By",
       sortable: true,
-      render: (item: MovementRecord) => (
-        <span className="text-muted-foreground">{item.performedBy}</span>
+      render: (m: IngredientMovement) => (
+        <span className="text-muted-foreground">{m.staffName ?? "—"}</span>
       ),
     },
   ];
 
-  // Summary stats
-  const totalInflow = filteredMovements
-    .filter((m) => m.type === "inflow")
+  // Summary stats over the loaded window.
+  const totalInflow = movements
+    .filter((m) => m.quantity > 0)
     .reduce((sum, m) => sum + m.quantity, 0);
-  const totalOutflow = filteredMovements
-    .filter((m) => ["outflow", "sale", "order", "waste"].includes(m.type))
-    .reduce((sum, m) => sum + m.quantity, 0);
-  const totalWaste = filteredMovements
+  const totalOutflow = movements
+    .filter((m) => m.quantity < 0)
+    .reduce((sum, m) => sum + Math.abs(m.quantity), 0);
+  const totalWaste = movements
     .filter((m) => m.type === "waste")
-    .reduce((sum, m) => sum + m.quantity, 0);
+    .reduce((sum, m) => sum + Math.abs(m.quantity), 0);
 
   return (
     <div className="space-y-6">
-      {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-card border border-border rounded-2xl p-4">
           <div className="flex items-center gap-3">
@@ -304,7 +222,9 @@ const InventoryMovementLog = () => {
               <ArrowDownLeft className="w-5 h-5 text-status-success" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-foreground">{totalInflow}</p>
+              <p className="text-2xl font-bold text-foreground">
+                {totalInflow.toFixed(1)}
+              </p>
               <p className="text-sm text-muted-foreground">Total Inflow</p>
             </div>
           </div>
@@ -315,7 +235,9 @@ const InventoryMovementLog = () => {
               <ArrowUpRight className="w-5 h-5 text-status-warning" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-foreground">{totalOutflow}</p>
+              <p className="text-2xl font-bold text-foreground">
+                {totalOutflow.toFixed(1)}
+              </p>
               <p className="text-sm text-muted-foreground">Total Outflow</p>
             </div>
           </div>
@@ -326,38 +248,46 @@ const InventoryMovementLog = () => {
               <Trash2 className="w-5 h-5 text-status-error" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-foreground">{totalWaste}</p>
+              <p className="text-2xl font-bold text-foreground">
+                {totalWaste.toFixed(1)}
+              </p>
               <p className="text-sm text-muted-foreground">Total Waste</p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Filter */}
       <div className="flex items-center gap-3">
-        <Select value={typeFilter} onValueChange={setTypeFilter}>
+        <Select
+          value={typeFilter}
+          onValueChange={(v) => setTypeFilter(v as MovementType | typeof ALL)}
+        >
           <SelectTrigger className="w-[180px] rounded-xl">
             <Filter className="w-4 h-4 mr-2" />
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {movementTypes.map((type) => (
-              <SelectItem key={type.value} value={type.value}>
-                {type.label}
+            <SelectItem value={ALL}>All Types</SelectItem>
+            {(Object.keys(TYPE_LABELS) as MovementType[]).map((t) => (
+              <SelectItem key={t} value={t}>
+                {TYPE_LABELS[t]}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
 
-      {/* Movement Table */}
-      <DataTable
-        data={filteredMovements}
-        columns={columns}
-        searchKeys={["itemName", "performedBy", "notes", "reference"]}
-        pageSize={20}
-        emptyMessage="No movement records found"
-      />
+      {isLoading ? (
+        <p className="text-center text-muted-foreground py-8">Loading...</p>
+      ) : (
+        <DataTable
+          data={movements}
+          columns={columns}
+          searchKeys={["ingredientName", "staffName", "reason", "referenceType"]}
+          pageSize={20}
+          emptyMessage="No movement records found"
+        />
+      )}
     </div>
   );
 };

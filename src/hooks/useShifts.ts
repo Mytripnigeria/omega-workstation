@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { shiftsService } from '@/services/shifts';
-import type { ShiftFilter } from '@/types/shift';
+import type { ChecklistCategory, ShiftFilter } from '@/types/shift';
 
 export function useShifts(filter: ShiftFilter = {}) {
   return useQuery({
@@ -43,6 +43,15 @@ export function useClockOut() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => shiftsService.clockOut(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['shifts'] }),
+  });
+}
+
+export function useUpdateChecklist() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, checklist }: { id: string; checklist: ChecklistCategory[] | null }) =>
+      shiftsService.updateChecklist(id, checklist),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['shifts'] }),
   });
 }

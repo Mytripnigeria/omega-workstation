@@ -1,19 +1,17 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Package,
   Search,
-  ArrowLeft,
-  Trash2,
   AlertTriangle,
   Filter,
-  MapPin,
-  RotateCcw,
-  Plus,
-  X,
-  ClipboardList,
+  ArrowLeft,
   Eye,
-  TrendingUp,
+  Plus,
+  Minus,
+  Repeat,
+  History,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,604 +30,479 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import ConfirmDialog from "@/components/ConfirmDialog";
+import { Textarea } from "@/components/ui/textarea";
 import ToastNotification from "@/components/ToastNotification";
 import ActivityLogButton from "@/components/ActivityLogButton";
 import ActivityLog from "@/components/ActivityLog";
 import ItemDetailsModal from "@/components/ItemDetailsModal";
 import InventoryMovementLog from "@/components/InventoryMovementLog";
-import { DataTable } from "@/components/DataTable";
+import { workstationAuth } from "@/services/api";
+import { useIngredients, useAdjustStock } from "@/hooks/useIngredients";
+import { useTransferStock } from "@/hooks/useMovements";
+import type { Ingredient } from "@/types/ingredient";
 
-interface InventoryItem {
-  id: string;
-  name: string;
-  category: string;
-  quantity: number;
-  unit: string;
-  minStock: number;
-  location: string;
-}
-
-interface UsageLog {
-  id: string;
-  itemName: string;
-  quantity: number;
-  unit: string;
-  usedFor: string;
-  usedAt: Date;
-  usedBy: string;
-}
-
-interface StoreLocation {
-  id: string;
-  name: string;
-  type: "instore" | "outstore";
-}
-
-interface RequestItem {
-  name: string;
-  quantity: string;
-  unit: string;
-  fromLocation: string;
-}
-
-const locations: StoreLocation[] = [
-  { id: "sr1", name: "Store Room 1", type: "instore" },
-  { id: "sr2", name: "Store Room 2", type: "instore" },
-  { id: "freezer", name: "Main Freezer", type: "instore" },
-  { id: "kc", name: "Kitchen Chiller", type: "outstore" },
-  { id: "prep", name: "Prep Station", type: "outstore" },
-];
-
-const mockItems: InventoryItem[] = [
-  { id: "1", name: "Diced Tomatoes", category: "Produce", quantity: 10, unit: "kg", minStock: 5, location: "prep" },
-  { id: "2", name: "Marinated Chicken", category: "Meat", quantity: 8, unit: "kg", minStock: 4, location: "kc" },
-  { id: "3", name: "Sliced Onions", category: "Produce", quantity: 5, unit: "kg", minStock: 3, location: "prep" },
-  { id: "4", name: "Prepped Rice", category: "Grains", quantity: 15, unit: "kg", minStock: 10, location: "prep" },
-];
-
-const mockUsageLogs: UsageLog[] = [
-  { id: "u1", itemName: "Diced Tomatoes", quantity: 2, unit: "kg", usedFor: "Jollof Rice prep", usedAt: new Date(Date.now() - 30 * 60000), usedBy: "John A." },
-  { id: "u2", itemName: "Marinated Chicken", quantity: 4, unit: "kg", usedFor: "Grilled Chicken orders", usedAt: new Date(Date.now() - 60 * 60000), usedBy: "Sarah O." },
-  { id: "u3", itemName: "Sliced Onions", quantity: 1, unit: "kg", usedFor: "Fried Rice prep", usedAt: new Date(Date.now() - 90 * 60000), usedBy: "Mike B." },
-];
-
-const emptyRequestItem: RequestItem = { name: "", quantity: "", unit: "", fromLocation: "" };
+const ALL = "__all__";
 
 const OutstorePage = () => {
   const navigate = useNavigate();
-  const [items, setItems] = useState<InventoryItem[]>(mockItems);
-  const [usageLogs] = useState<UsageLog[]>(mockUsageLogs);
+  const staff = workstationAuth.getStaff();
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedLocation, setSelectedLocation] = useState<string>("all");
-  const [showReturnModal, setShowReturnModal] = useState(false);
-  const [showWasteModal, setShowWasteModal] = useState(false);
-  const [showRequestModal, setShowRequestModal] = useState(false);
-  const [showLogUsageModal, setShowLogUsageModal] = useState(false);
-  const [selectedItems, setSelectedItems] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState("inventory");
-  const [returnDestination, setReturnDestination] = useState("");
-  const [returnReason, setReturnReason] = useState("");
-  const [wasteReason, setWasteReason] = useState("");
-  const [wasteNotes, setWasteNotes] = useState("");
-  const [usageFor, setUsageFor] = useState("");
-  
-  const [requestItems, setRequestItems] = useState<RequestItem[]>([{ ...emptyRequestItem }]);
+  const [statusFilter, setStatusFilter] = useState<string>(ALL);
+  const [selectedItem, setSelectedItem] = useState<Ingredient | null>(null);
   const [showActivityLog, setShowActivityLog] = useState(false);
-  const [selectedItemForDetails, setSelectedItemForDetails] = useState<InventoryItem | null>(null);
+  const [adjustModal, setAdjustModal] = useState<{
+    open: boolean;
+    item: Ingredient | null;
+    direction: "add" | "subtract" | "waste";
+  }>({ open: false, item: null, direction: "add" });
+  const [adjustAmount, setAdjustAmount] = useState("");
+  const [adjustReason, setAdjustReason] = useState("");
+  const [transferModal, setTransferModal] = useState<{
+    open: boolean;
+    item: Ingredient | null;
+  }>({ open: false, item: null });
+  const [transferTargetId, setTransferTargetId] = useState("");
+  const [transferQty, setTransferQty] = useState("");
+  const [transferReason, setTransferReason] = useState("");
+  const [toast, setToast] = useState<{
+    open: boolean;
+    type: "success" | "error" | "warning" | "info";
+    title: string;
+    message?: string;
+  }>({ open: false, type: "success", title: "" });
 
-  const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; description: string; action: () => void }>({
-    open: false, title: "", description: "", action: () => {},
+  const { data: page, isLoading } = useIngredients({
+    storeId: staff?.storeId,
+    status: statusFilter === "low" ? "low" : undefined,
+    limit: 100,
   });
-  const [toast, setToast] = useState<{ open: boolean; type: "success" | "error" | "warning" | "info"; title: string; message?: string }>({ open: false, type: "success", title: "" });
 
-  const outstoreLocations = locations.filter((l) => l.type === "outstore");
-  const instoreLocations = locations.filter((l) => l.type === "instore");
+  const ingredients = useMemo(() => page?.data ?? [], [page]);
 
-  const filteredItems = items.filter((item) => {
-    const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesLocation = selectedLocation === "all" || item.location === selectedLocation;
-    const isOutstore = outstoreLocations.some((l) => l.id === item.location);
-    return matchesSearch && matchesLocation && isOutstore;
-  });
+  const filteredItems = ingredients.filter((i) =>
+    !searchQuery
+      ? true
+      : i.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (i.sku ?? "").toLowerCase().includes(searchQuery.toLowerCase()),
+  );
 
-  const toggleItemSelection = (id: string) => {
-    setSelectedItems((prev) =>
-      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+  const adjustStock = useAdjustStock();
+  const transfer = useTransferStock();
+
+  const isLowStock = (i: Ingredient) =>
+    Number(i.currentStock) <= Number(i.minStock);
+
+  const openAdjust = (
+    item: Ingredient,
+    direction: "add" | "subtract" | "waste",
+  ) => {
+    setAdjustModal({ open: true, item, direction });
+    setAdjustAmount("");
+    setAdjustReason(direction === "waste" ? "Spoilage" : "");
+  };
+
+  const submitAdjust = () => {
+    if (!adjustModal.item) return;
+    const qty = Number(adjustAmount);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      setToast({ open: true, type: "error", title: "Invalid quantity" });
+      return;
+    }
+    const signed = adjustModal.direction === "add" ? qty : -qty;
+    if (adjustModal.direction === "waste" && !adjustReason.trim()) {
+      setToast({
+        open: true,
+        type: "error",
+        title: "Reason required",
+        message: "Please provide a reason for waste.",
+      });
+      return;
+    }
+    adjustStock.mutate(
+      {
+        id: adjustModal.item.id,
+        adjustment: signed,
+        reason: adjustReason.trim() || undefined,
+      },
+      {
+        onSuccess: () => {
+          setAdjustModal({ open: false, item: null, direction: "add" });
+          setToast({
+            open: true,
+            type: adjustModal.direction === "waste" ? "warning" : "success",
+            title:
+              adjustModal.direction === "waste"
+                ? "Waste recorded"
+                : adjustModal.direction === "add"
+                  ? "Stock added"
+                  : "Stock reduced",
+            message: `${adjustModal.item?.name}: ${signed > 0 ? "+" : ""}${signed} ${adjustModal.item?.unit}`,
+          });
+        },
+        onError: (e: Error) =>
+          setToast({ open: true, type: "error", title: "Failed", message: e.message }),
+      },
     );
   };
 
-  const getLocationName = (locationId: string) => {
-    return locations.find((l) => l.id === locationId)?.name || locationId;
+  const openTransfer = (item: Ingredient) => {
+    setTransferModal({ open: true, item });
+    setTransferTargetId("");
+    setTransferQty("");
+    setTransferReason("");
   };
 
-  const isLowStock = (item: InventoryItem) => item.quantity <= item.minStock;
-
-  const handleAddRequestItem = () => {
-    setRequestItems([...requestItems, { ...emptyRequestItem }]);
-  };
-
-  const handleRemoveRequestItem = (index: number) => {
-    if (requestItems.length > 1) {
-      setRequestItems(requestItems.filter((_, i) => i !== index));
-    }
-  };
-
-  const updateRequestItem = (index: number, field: keyof RequestItem, value: string) => {
-    const updated = [...requestItems];
-    updated[index] = { ...updated[index], [field]: value };
-    setRequestItems(updated);
-  };
-
-  const handleSubmitRequest = () => {
-    const validItems = requestItems.filter(item => item.name && item.quantity && item.fromLocation);
-    if (validItems.length === 0) {
-      setToast({ open: true, type: "error", title: "Error", message: "Please fill in all required fields" });
+  const submitTransfer = () => {
+    if (!transferModal.item || !transferTargetId) return;
+    const qty = Number(transferQty);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      setToast({ open: true, type: "error", title: "Invalid quantity" });
       return;
     }
-    setConfirmDialog({
-      open: true,
-      title: "Request Items",
-      description: `Request ${validItems.length} item(s) from instore?`,
-      action: () => {
-        setRequestItems([{ ...emptyRequestItem }]);
-        setShowRequestModal(false);
-        setToast({ open: true, type: "success", title: "Request Sent", message: "Your request has been sent to instore for approval" });
-      }
-    });
-  };
-
-  const handleReturnItems = () => {
-    if (!returnDestination) {
-      setToast({ open: true, type: "error", title: "Error", message: "Please select a destination" });
-      return;
-    }
-    setConfirmDialog({
-      open: true,
-      title: "Return Items",
-      description: `Return ${selectedItems.length} item(s) to ${getLocationName(returnDestination)}?`,
-      action: () => {
-        setSelectedItems([]);
-        setReturnDestination("");
-        setReturnReason("");
-        setShowReturnModal(false);
-        setToast({ open: true, type: "success", title: "Return Requested", message: "Return request sent to instore for approval" });
-      }
-    });
-  };
-
-  const handleReportWaste = () => {
-    if (!wasteReason) {
-      setToast({ open: true, type: "error", title: "Error", message: "Please select a reason" });
-      return;
-    }
-    setConfirmDialog({
-      open: true,
-      title: "Report Waste",
-      description: `Report ${selectedItems.length} item(s) as ${wasteReason}?`,
-      action: () => {
-        setItems(items.filter(item => !selectedItems.includes(item.id)));
-        setSelectedItems([]);
-        setWasteReason("");
-        setWasteNotes("");
-        setShowWasteModal(false);
-        setToast({ open: true, type: "success", title: "Waste Reported", message: "Items have been removed from inventory" });
-      }
-    });
-  };
-
-  const handleLogUsage = () => {
-    if (selectedItems.length === 0 || !usageFor) {
-      setToast({ open: true, type: "error", title: "Error", message: "Please select items and enter usage details" });
-      return;
-    }
-    setConfirmDialog({
-      open: true,
-      title: "Log Usage",
-      description: `Log usage for ${selectedItems.length} item(s)?`,
-      action: () => {
-        setSelectedItems([]);
-        setUsageFor("");
-        setShowLogUsageModal(false);
-        setToast({ open: true, type: "success", title: "Usage Logged", message: "Item usage has been recorded" });
-      }
-    });
-  };
-
-  const formatTime = (date: Date) => {
-    const mins = Math.floor((Date.now() - date.getTime()) / 60000);
-    if (mins < 60) return `${mins} min ago`;
-    const hours = Math.floor(mins / 60);
-    return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+    transfer.mutate(
+      {
+        fromId: transferModal.item.id,
+        toIngredientId: transferTargetId,
+        quantity: qty,
+        reason: transferReason.trim() || undefined,
+      },
+      {
+        onSuccess: () => {
+          setTransferModal({ open: false, item: null });
+          setToast({ open: true, type: "success", title: "Transfer recorded" });
+        },
+        onError: (e: Error) =>
+          setToast({ open: true, type: "error", title: "Failed", message: e.message }),
+      },
+    );
   };
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="bg-card border-b border-border px-4 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => navigate("/dashboard")}
-              className="rounded-xl"
-            >
-              <ArrowLeft className="w-5 h-5 text-foreground" />
-            </Button>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
-                <Package className="w-5 h-5 text-foreground" />
-              </div>
-              <div>
-                <h1 className="text-xl font-semibold text-foreground">Outstore Inventory</h1>
-                <p className="text-sm text-muted-foreground">{filteredItems.length} items in use</p>
+      <header className="bg-card border-b border-border sticky top-0 z-50">
+        <div className="px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => navigate("/dashboard")}
+                className="p-2 hover:bg-muted rounded-xl transition-colors"
+              >
+                <ArrowLeft className="w-5 h-5 text-foreground" />
+              </button>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
+                  <Package className="w-5 h-5 text-foreground" />
+                </div>
+                <div>
+                  <h1 className="text-lg font-bold text-foreground">Outstore (Kitchen)</h1>
+                  <p className="text-xs text-muted-foreground">
+                    {ingredients.length} ingredient{ingredients.length === 1 ? "" : "s"}
+                  </p>
+                </div>
               </div>
             </div>
+            <ActivityLogButton onClick={() => setShowActivityLog(true)} />
           </div>
-          <ActivityLogButton onClick={() => setShowActivityLog(true)} />
         </div>
-      </div>
+      </header>
 
-      <div className="page-container">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
-          <TabsList className="bg-secondary/50 p-1 rounded-xl flex-wrap">
-            <TabsTrigger value="inventory" className="rounded-lg data-[state=active]:bg-card">Inventory</TabsTrigger>
+      <main className="page-container max-w-7xl mx-auto">
+        <Tabs defaultValue="items" className="space-y-4">
+          <TabsList className="bg-secondary/50 p-1 rounded-xl">
+            <TabsTrigger value="items" className="rounded-lg data-[state=active]:bg-card">
+              <Package className="w-4 h-4 mr-1" />
+              Items
+            </TabsTrigger>
             <TabsTrigger value="movements" className="rounded-lg data-[state=active]:bg-card">
-              <TrendingUp className="w-4 h-4 mr-1" />
+              <History className="w-4 h-4 mr-1" />
               Movements
             </TabsTrigger>
-            <TabsTrigger value="usage" className="rounded-lg data-[state=active]:bg-card">Usage Log</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="inventory" className="mt-6">
-            {/* Search and Filter */}
-            <div className="flex flex-col sm:flex-row gap-3 mb-6">
+          <TabsContent value="items" className="space-y-4">
+            <div className="flex flex-col sm:flex-row gap-3">
               <div className="relative flex-1">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-foreground" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search items..."
+                  placeholder="Search by name or SKU..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-12 h-12 rounded-xl border-border"
+                  className="pl-10 rounded-xl"
                 />
               </div>
-              <Select value={selectedLocation} onValueChange={setSelectedLocation}>
-                <SelectTrigger className="w-full sm:w-[200px] h-12 rounded-xl">
-                  <Filter className="w-4 h-4 mr-2 text-foreground" />
-                  <SelectValue placeholder="All Locations" />
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-full sm:w-44 rounded-xl">
+                  <Filter className="w-4 h-4 mr-2" />
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Locations</SelectItem>
-                  {outstoreLocations.map((loc) => (
-                    <SelectItem key={loc.id} value={loc.id}>
-                      {loc.name}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value={ALL}>All items</SelectItem>
+                  <SelectItem value="low">Low stock only</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
-            {/* Action Buttons */}
-            <div className="flex flex-wrap gap-3 mb-6">
-              <Button onClick={() => setShowRequestModal(true)} className="rounded-xl h-11">
-                <Plus className="w-4 h-4 mr-2 text-foreground" />
-                Request from Instore
-              </Button>
-              <Button
-                variant="outline"
-                disabled={selectedItems.length === 0}
-                onClick={() => setShowReturnModal(true)}
-                className="rounded-xl h-11"
-              >
-                <RotateCcw className="w-4 h-4 mr-2 text-foreground" />
-                Return to Instore
-              </Button>
-              <Button
-                variant="outline"
-                disabled={selectedItems.length === 0}
-                onClick={() => setShowLogUsageModal(true)}
-                className="rounded-xl h-11"
-              >
-                <ClipboardList className="w-4 h-4 mr-2 text-foreground" />
-                Log Usage
-              </Button>
-              <Button
-                variant="outline"
-                disabled={selectedItems.length === 0}
-                onClick={() => setShowWasteModal(true)}
-                className="rounded-xl h-11"
-              >
-                <Trash2 className="w-4 h-4 mr-2 text-foreground" />
-                Report Waste
-              </Button>
-            </div>
+            {isLoading && (
+              <p className="text-center text-muted-foreground py-8">Loading...</p>
+            )}
 
-            {/* Inventory Table */}
-            <div className="bg-card border border-border rounded-2xl overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-secondary/50">
-                    <tr>
-                      <th className="p-4 text-left">
-                        <input
-                          type="checkbox"
-                          checked={selectedItems.length === filteredItems.length && filteredItems.length > 0}
-                          onChange={(e) =>
-                            setSelectedItems(e.target.checked ? filteredItems.map((i) => i.id) : [])
-                          }
-                          className="rounded border-border w-5 h-5"
-                        />
-                      </th>
-                      <th className="p-4 text-left text-sm font-medium text-muted-foreground">Item</th>
-                      <th className="p-4 text-left text-sm font-medium text-muted-foreground">Category</th>
-                      <th className="p-4 text-left text-sm font-medium text-muted-foreground">Quantity</th>
-                      <th className="p-4 text-left text-sm font-medium text-muted-foreground">Location</th>
-                      <th className="p-4 text-left text-sm font-medium text-muted-foreground">Status</th>
-                      <th className="p-4 text-left text-sm font-medium text-muted-foreground">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredItems.map((item) => (
-                      <tr key={item.id} className="border-t border-border hover:bg-secondary/20 transition-colors">
-                        <td className="p-4">
-                          <input
-                            type="checkbox"
-                            checked={selectedItems.includes(item.id)}
-                            onChange={() => toggleItemSelection(item.id)}
-                            className="rounded border-border w-5 h-5"
-                          />
-                        </td>
-                        <td className="p-4 font-medium text-foreground">{item.name}</td>
-                        <td className="p-4 text-muted-foreground">{item.category}</td>
-                        <td className="p-4 text-foreground font-medium">
-                          {item.quantity} {item.unit}
-                        </td>
-                        <td className="p-4">
-                          <Badge variant="outline" className="flex items-center gap-1.5 w-fit rounded-lg">
-                            <MapPin className="w-3 h-3 text-foreground" />
-                            {getLocationName(item.location)}
-                          </Badge>
-                        </td>
-                        <td className="p-4">
-                          {isLowStock(item) ? (
-                            <Badge className="bg-amber-100 text-amber-700 flex items-center gap-1.5 w-fit rounded-lg">
-                              <AlertTriangle className="w-3 h-3" />
-                              Low Stock
-                            </Badge>
-                          ) : (
-                            <Badge className="bg-green-100 text-green-700 rounded-lg">OK</Badge>
-                          )}
-                        </td>
-                        <td className="p-4">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setSelectedItemForDetails(item)}
-                            className="rounded-lg"
-                          >
-                            <Eye className="w-4 h-4 text-foreground" />
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            {!isLoading && filteredItems.length === 0 && (
+              <div className="bg-card border border-border rounded-2xl p-12 text-center">
+                <Package className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                <p className="text-muted-foreground">No ingredients match.</p>
               </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {filteredItems.map((i) => {
+                const low = isLowStock(i);
+                return (
+                  <div
+                    key={i.id}
+                    className={`bg-card border rounded-2xl p-4 ${
+                      low ? "border-status-warning" : "border-border"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="min-w-0">
+                        <h3 className="font-semibold text-foreground truncate">{i.name}</h3>
+                        {i.sku && (
+                          <p className="text-xs text-muted-foreground">SKU: {i.sku}</p>
+                        )}
+                      </div>
+                      {low && (
+                        <Badge className="bg-status-warning/10 text-status-warning">
+                          <AlertTriangle className="w-3 h-3 mr-1" /> Low
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-2xl font-bold text-foreground mb-3">
+                      {Number(i.currentStock)}
+                      <span className="text-sm font-normal text-muted-foreground ml-1">
+                        {i.unit}
+                      </span>
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-lg"
+                        onClick={() => openAdjust(i, "add")}
+                      >
+                        <Plus className="w-4 h-4 mr-1" />
+                        Add
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-lg"
+                        onClick={() => openAdjust(i, "subtract")}
+                      >
+                        <Minus className="w-4 h-4 mr-1" />
+                        Use
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-lg text-destructive hover:bg-destructive/10"
+                        onClick={() => openAdjust(i, "waste")}
+                      >
+                        <Trash2 className="w-4 h-4 mr-1" />
+                        Waste
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-lg"
+                        onClick={() => openTransfer(i)}
+                      >
+                        <Repeat className="w-4 h-4 mr-1" />
+                        Transfer
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="rounded-lg col-span-2"
+                        onClick={() => setSelectedItem(i)}
+                      >
+                        <Eye className="w-4 h-4 mr-1" />
+                        Details & history
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </TabsContent>
 
-          <TabsContent value="movements" className="mt-6">
+          <TabsContent value="movements">
             <InventoryMovementLog />
           </TabsContent>
-
-          <TabsContent value="usage" className="mt-6">
-            <div className="space-y-4">
-              {usageLogs.map((log) => (
-                <div key={log.id} className="bg-card border border-border rounded-2xl p-5">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-semibold text-foreground">{log.itemName}</span>
-                    <span className="text-sm text-muted-foreground">{formatTime(log.usedAt)}</span>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                    <Badge variant="outline" className="rounded-lg">{log.quantity} {log.unit}</Badge>
-                    <span>•</span>
-                    <span>{log.usedFor}</span>
-                    <span>•</span>
-                    <span>by {log.usedBy}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </TabsContent>
         </Tabs>
-      </div>
+      </main>
 
-      {/* Request Items Modal */}
-      <Dialog open={showRequestModal} onOpenChange={setShowRequestModal}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+      <Dialog
+        open={adjustModal.open}
+        onOpenChange={(open) =>
+          setAdjustModal((s) => ({ ...s, open: open ? s.open : false }))
+        }
+      >
+        <DialogContent className="rounded-2xl max-w-sm">
           <DialogHeader>
-            <DialogTitle>Request Items from Instore</DialogTitle>
+            <DialogTitle>
+              {adjustModal.direction === "waste"
+                ? "Record waste"
+                : adjustModal.direction === "add"
+                  ? "Add stock"
+                  : "Use stock"}
+              {adjustModal.item ? ` — ${adjustModal.item.name}` : ""}
+            </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            {requestItems.map((item, index) => (
-              <div key={index} className="bg-secondary/30 rounded-xl p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-foreground">Item {index + 1}</span>
-                  {requestItems.length > 1 && (
-                    <Button size="sm" variant="ghost" onClick={() => handleRemoveRequestItem(index)} className="rounded-lg">
-                      <X className="w-4 h-4 text-foreground" />
-                    </Button>
-                  )}
-                </div>
-                <Input 
-                  placeholder="Item name *" 
-                  value={item.name}
-                  onChange={(e) => updateRequestItem(index, "name", e.target.value)}
-                  className="rounded-xl"
-                />
-                <div className="grid grid-cols-2 gap-3">
-                  <Input 
-                    placeholder="Quantity *" 
-                    type="number"
-                    value={item.quantity}
-                    onChange={(e) => updateRequestItem(index, "quantity", e.target.value)}
-                    className="rounded-xl"
-                  />
-                  <Input 
-                    placeholder="Unit (kg, L, pcs) *"
-                    value={item.unit}
-                    onChange={(e) => updateRequestItem(index, "unit", e.target.value)}
-                    className="rounded-xl"
-                  />
-                </div>
-                <Select value={item.fromLocation} onValueChange={(v) => updateRequestItem(index, "fromLocation", v)}>
-                  <SelectTrigger className="rounded-xl">
-                    <SelectValue placeholder="From location *" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {instoreLocations.map((loc) => (
-                      <SelectItem key={loc.id} value={loc.id}>
-                        {loc.name}
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm font-medium text-foreground mb-2 block">
+                Quantity ({adjustModal.item?.unit})
+              </label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="0"
+                value={adjustAmount}
+                onChange={(e) => setAdjustAmount(e.target.value)}
+                className="rounded-xl"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-foreground mb-2 block">
+                Reason {adjustModal.direction === "waste" ? "(required)" : "(optional)"}
+              </label>
+              <Textarea
+                placeholder={
+                  adjustModal.direction === "waste"
+                    ? "e.g. Spoilage, expired, dropped"
+                    : adjustModal.direction === "add"
+                      ? "e.g. Restock from supplier"
+                      : "e.g. Used in tonight's service"
+                }
+                value={adjustReason}
+                onChange={(e) => setAdjustReason(e.target.value)}
+                className="rounded-xl"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1 rounded-xl"
+                onClick={() =>
+                  setAdjustModal({ open: false, item: null, direction: "add" })
+                }
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1 rounded-xl"
+                onClick={submitAdjust}
+                disabled={adjustStock.isPending}
+              >
+                Confirm
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={transferModal.open}
+        onOpenChange={(open) =>
+          setTransferModal((s) => ({ ...s, open: open ? s.open : false }))
+        }
+      >
+        <DialogContent className="rounded-2xl max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Transfer {transferModal.item?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm font-medium text-foreground mb-2 block">
+                Destination ingredient
+              </label>
+              <Select value={transferTargetId} onValueChange={setTransferTargetId}>
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue placeholder="Pick destination" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ingredients
+                    .filter((i) => i.id !== transferModal.item?.id)
+                    .map((i) => (
+                      <SelectItem key={i.id} value={i.id}>
+                        {i.name}
                       </SelectItem>
                     ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            ))}
-            <Button variant="outline" onClick={handleAddRequestItem} className="w-full rounded-xl">
-              <Plus className="w-4 h-4 mr-2 text-foreground" />
-              Add Another Item
-            </Button>
-          </div>
-          <div className="flex justify-end gap-3 pt-4 border-t">
-            <Button variant="outline" onClick={() => setShowRequestModal(false)} className="rounded-xl">
-              Cancel
-            </Button>
-            <Button onClick={handleSubmitRequest} className="rounded-xl">
-              Submit Request
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Return Items Modal */}
-      <Dialog open={showReturnModal} onOpenChange={setShowReturnModal}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Return to Instore</DialogTitle>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Returning {selectedItems.length} item(s) to instore
-            </p>
-            <Select value={returnDestination} onValueChange={setReturnDestination}>
-              <SelectTrigger className="rounded-xl">
-                <SelectValue placeholder="Select destination *" />
-              </SelectTrigger>
-              <SelectContent>
-                {instoreLocations.map((loc) => (
-                  <SelectItem key={loc.id} value={loc.id}>
-                    {loc.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Input
-              placeholder="Reason for return..."
-              value={returnReason}
-              onChange={(e) => setReturnReason(e.target.value)}
-              className="rounded-xl"
-            />
-          </div>
-          <div className="flex justify-end gap-3 pt-4 border-t">
-            <Button variant="outline" onClick={() => setShowReturnModal(false)} className="rounded-xl">
-              Cancel
-            </Button>
-            <Button onClick={handleReturnItems} className="rounded-xl">
-              Request Return
-            </Button>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-foreground mb-2 block">
+                Quantity ({transferModal.item?.unit})
+              </label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="0"
+                value={transferQty}
+                onChange={(e) => setTransferQty(e.target.value)}
+                className="rounded-xl"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-foreground mb-2 block">
+                Reason (optional)
+              </label>
+              <Textarea
+                placeholder="e.g. Return excess to instore"
+                value={transferReason}
+                onChange={(e) => setTransferReason(e.target.value)}
+                className="rounded-xl"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1 rounded-xl"
+                onClick={() => setTransferModal({ open: false, item: null })}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1 rounded-xl"
+                onClick={submitTransfer}
+                disabled={!transferTargetId || transfer.isPending}
+              >
+                Transfer
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Log Usage Modal */}
-      <Dialog open={showLogUsageModal} onOpenChange={setShowLogUsageModal}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Log Usage</DialogTitle>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Logging usage for {selectedItems.length} item(s)
-            </p>
-            <Input
-              placeholder="Used for (e.g., Jollof Rice prep) *"
-              value={usageFor}
-              onChange={(e) => setUsageFor(e.target.value)}
-              className="rounded-xl"
-            />
-          </div>
-          <div className="flex justify-end gap-3 pt-4 border-t">
-            <Button variant="outline" onClick={() => setShowLogUsageModal(false)} className="rounded-xl">
-              Cancel
-            </Button>
-            <Button onClick={handleLogUsage} className="rounded-xl">
-              Log Usage
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Waste Report Modal */}
-      <Dialog open={showWasteModal} onOpenChange={setShowWasteModal}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Report Waste</DialogTitle>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Reporting {selectedItems.length} item(s) as waste
-            </p>
-            <Select value={wasteReason} onValueChange={setWasteReason}>
-              <SelectTrigger className="rounded-xl">
-                <SelectValue placeholder="Reason for waste *" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="expired">Expired</SelectItem>
-                <SelectItem value="spoiled">Spoiled</SelectItem>
-                <SelectItem value="damaged">Damaged</SelectItem>
-                <SelectItem value="contaminated">Contaminated</SelectItem>
-                <SelectItem value="other">Other</SelectItem>
-              </SelectContent>
-            </Select>
-            <Input
-              placeholder="Additional notes..."
-              value={wasteNotes}
-              onChange={(e) => setWasteNotes(e.target.value)}
-              className="rounded-xl"
-            />
-          </div>
-          <div className="flex justify-end gap-3 pt-4 border-t">
-            <Button variant="outline" onClick={() => setShowWasteModal(false)} className="rounded-xl">
-              Cancel
-            </Button>
-            <Button onClick={handleReportWaste} variant="destructive" className="rounded-xl">
-              Report Waste
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <ConfirmDialog
-        open={confirmDialog.open}
-        onOpenChange={(open) => setConfirmDialog({ ...confirmDialog, open })}
-        title={confirmDialog.title}
-        description={confirmDialog.description}
-        onConfirm={() => {
-          confirmDialog.action();
-          setConfirmDialog({ ...confirmDialog, open: false });
-        }}
+      <ItemDetailsModal
+        open={!!selectedItem}
+        onClose={() => setSelectedItem(null)}
+        item={
+          selectedItem
+            ? {
+                id: selectedItem.id,
+                name: selectedItem.name,
+                category: "Ingredient",
+                quantity: Number(selectedItem.currentStock),
+                unit: selectedItem.unit,
+                location: selectedItem.storeId,
+                locationName: "Outstore",
+              }
+            : null
+        }
       />
 
       <ToastNotification
@@ -639,22 +512,11 @@ const OutstorePage = () => {
         title={toast.title}
         message={toast.message}
       />
-
-      {/* Activity Log */}
       <ActivityLog
         open={showActivityLog}
         onClose={() => setShowActivityLog(false)}
-        pageName="Outstore Inventory"
-      />
-
-      {/* Item Details Modal */}
-      <ItemDetailsModal
-        open={!!selectedItemForDetails}
-        onClose={() => setSelectedItemForDetails(null)}
-        item={selectedItemForDetails ? {
-          ...selectedItemForDetails,
-          locationName: getLocationName(selectedItemForDetails.location)
-        } : null}
+        pageName="Outstore"
+        resourceType="ingredient"
       />
     </div>
   );

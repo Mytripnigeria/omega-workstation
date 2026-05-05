@@ -25,4 +25,10 @@ export const shiftsService = {
 
   clockOut: (id: string): Promise<Shift> =>
     workstationApi.request<Shift>(`/shifts/${id}/clock-out`, { method: 'POST' }),
+
+  updateChecklist: (id: string, checklist: Shift['checklist']): Promise<Shift> =>
+    workstationApi.request<Shift>(`/shifts/${id}/checklist`, {
+      method: 'PATCH',
+      body: JSON.stringify({ checklist }),
+    }),
 };
