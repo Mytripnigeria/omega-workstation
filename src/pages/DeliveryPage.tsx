@@ -1,289 +1,276 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bike, MapPin, Clock, Package, Timer, CheckCircle2, AlertTriangle, ArrowLeft, Phone, Navigation } from "lucide-react";
+import {
+  Bike,
+  MapPin,
+  Clock,
+  CheckCircle2,
+  AlertTriangle,
+  ArrowLeft,
+  Phone,
+  Navigation,
+  XCircle,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import DeliveryModal from "@/components/DeliveryModal";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import ToastNotification from "@/components/ToastNotification";
 import ActivityLogButton from "@/components/ActivityLogButton";
 import ActivityLog from "@/components/ActivityLog";
-import DeliveryNotificationPopup from "@/components/DeliveryNotificationPopup";
-
-interface DeliveryOrder {
-  id: string;
-  customerName: string;
-  phone: string;
-  address: string;
-  items: string[];
-  total: number;
-  status: "pending" | "picked_up" | "on_the_way" | "delivered";
-  startTime: Date;
-  estimatedMinutes: number;
-  distance: string;
-  riderName?: string;
-  pickupTime?: string;
-  notes?: string;
-}
-
-const mockDeliveries: DeliveryOrder[] = [
-  { id: "#D001", customerName: "James Adeyemi", phone: "+234 801 234 5678", address: "42 High Level, Makurdi", items: ["2x Jollof Rice", "1x Plantain", "2x Chapman"], total: 5600, status: "pending", startTime: new Date(Date.now() - 2 * 60000), estimatedMinutes: 15, distance: "1.2 km", notes: "Ring doorbell twice" },
-  { id: "#D002", customerName: "Sophie Okafor", phone: "+234 802 345 6789", address: "15 Wurukum Road, Makurdi", items: ["1x Fried Rice", "1x Grilled Chicken", "1x Zobo"], total: 5800, status: "picked_up", startTime: new Date(Date.now() - 8 * 60000), estimatedMinutes: 20, distance: "2.8 km" },
-  { id: "#D003", customerName: "Oliver Bello", phone: "+234 803 456 7890", address: "8 North Bank, Makurdi", items: ["3x Beef Suya", "2x Coleslaw"], total: 6600, status: "on_the_way", startTime: new Date(Date.now() - 15 * 60000), estimatedMinutes: 12, distance: "0.8 km" },
-];
-
-const completedToday: DeliveryOrder[] = [
-  { id: "#D098", customerName: "Ada Eze", phone: "", address: "10 Modern Market", items: ["1x Jollof"], total: 2500, status: "delivered", startTime: new Date(Date.now() - 60 * 60000), estimatedMinutes: 15, distance: "1.5 km" },
-  { id: "#D097", customerName: "Chidi Obi", phone: "", address: "22 Old GRA", items: ["2x Fried Rice"], total: 4600, status: "delivered", startTime: new Date(Date.now() - 90 * 60000), estimatedMinutes: 20, distance: "2.1 km" },
-];
+import {
+  useMyDeliveries,
+  usePickupDelivery,
+  useDeliverDelivery,
+  useFailDelivery,
+} from "@/hooks/useDeliveries";
+import type { Delivery } from "@/types/delivery";
 
 const DeliveryPage = () => {
   const navigate = useNavigate();
-  const [deliveries, setDeliveries] = useState<DeliveryOrder[]>(mockDeliveries);
-  const [completed] = useState<DeliveryOrder[]>(completedToday);
-  const [selectedDelivery, setSelectedDelivery] = useState<DeliveryOrder | null>(null);
-  const [activeTab, setActiveTab] = useState("new");
-  const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; description: string; action: () => void }>({ open: false, title: "", description: "", action: () => {} });
+  const [activeTab, setActiveTab] = useState<"active" | "completed">("active");
+  const [selectedDelivery, setSelectedDelivery] = useState<Delivery | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    title: string;
+    description: string;
+    action: () => void;
+  }>({ open: false, title: "", description: "", action: () => {} });
+  const [toast, setToast] = useState<{
+    open: boolean;
+    type: "success" | "error" | "warning" | "info";
+    title: string;
+    message?: string;
+  }>({ open: false, type: "success", title: "" });
   const [showActivityLog, setShowActivityLog] = useState(false);
-  const [deliveryNotification, setDeliveryNotification] = useState<{
-    id: string;
-    orderNumber: string;
-    customerName: string;
-    address: string;
-    items: number;
-    total: number;
-    distance: string;
-    timestamp: Date;
-  } | null>(null);
-  const [, setTick] = useState(0);
+  const [failModal, setFailModal] = useState<{ open: boolean; deliveryId: string | null }>({
+    open: false,
+    deliveryId: null,
+  });
+  const [failReason, setFailReason] = useState("");
 
-  useEffect(() => {
-    const interval = setInterval(() => setTick((t) => t + 1), 1000);
-    return () => clearInterval(interval);
-  }, []);
+  // Active = assigned/in_transit; Completed today = delivered/failed.
+  const { data: activePage, isLoading } = useMyDeliveries(
+    { status: "assigned,in_transit", limit: 50 },
+    5000,
+  );
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const { data: completedPage } = useMyDeliveries(
+    { status: "delivered,failed", dateFrom: today.toISOString().split("T")[0], limit: 50 },
+    15000,
+  );
 
-  // Simulate incoming delivery notifications
-  useEffect(() => {
-    const simulateDelivery = () => {
-      const orderNum = `#D${Date.now().toString().slice(-4)}`;
-      setDeliveryNotification({
-        id: orderNum,
-        orderNumber: orderNum,
-        customerName: ["Ada Eze", "Chidi Obi", "Amaka Nweke", "Bola Ahmed"][Math.floor(Math.random() * 4)],
-        address: ["42 High Level, Makurdi", "15 Wurukum Road", "8 North Bank", "22 Modern Market"][Math.floor(Math.random() * 4)],
-        items: Math.floor(Math.random() * 5) + 1,
-        total: Math.floor(Math.random() * 8000) + 3000,
-        distance: `${(Math.random() * 3 + 0.5).toFixed(1)} km`,
-        timestamp: new Date(),
-      });
-    };
+  const active = activePage?.data ?? [];
+  const completed = completedPage?.data ?? [];
 
-    const timeout = setTimeout(simulateDelivery, 20000);
-    const interval = setInterval(simulateDelivery, 90000);
+  const pickup = usePickupDelivery();
+  const deliver = useDeliverDelivery();
+  const fail = useFailDelivery();
 
-    return () => {
-      clearTimeout(timeout);
-      clearInterval(interval);
-    };
-  }, []);
+  const elapsedMin = (iso: string) =>
+    Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
 
-  const getRemainingSeconds = (order: DeliveryOrder) => {
-    const elapsed = Math.floor((Date.now() - order.startTime.getTime()) / 1000);
-    return order.estimatedMinutes * 60 - elapsed;
-  };
-
-  const formatCountdown = (seconds: number) => {
-    const isNegative = seconds < 0;
-    const absSeconds = Math.abs(seconds);
-    const mins = Math.floor(absSeconds / 60);
-    const secs = absSeconds % 60;
-    return `${isNegative ? "-" : ""}${mins}:${secs.toString().padStart(2, "0")}`;
-  };
-
-  const updateStatus = (id: string, status: DeliveryOrder["status"]) => {
+  const handlePickup = (d: Delivery) => {
     setConfirmDialog({
       open: true,
-      title: `Update to ${status.replace("_", " ")}`,
-      description: "Are you sure you want to update this delivery status?",
-      action: () => {
-        setDeliveries((prev) => prev.map((d) => (d.id === id ? { ...d, status } : d)));
-        if (selectedDelivery?.id === id) setSelectedDelivery((prev) => (prev ? { ...prev, status } : null));
-      }
+      title: "Pickup confirmed",
+      description: `Mark order #${d.orderNumber} as picked up?`,
+      action: () =>
+        pickup.mutate(d.id, {
+          onSuccess: () =>
+            setToast({ open: true, type: "success", title: "Picked up", message: `Order #${d.orderNumber} in transit.` }),
+          onError: (e: Error) =>
+            setToast({ open: true, type: "error", title: "Failed", message: e.message }),
+        }),
     });
   };
 
-  const getStatusColor = (status: DeliveryOrder["status"]) => {
-    switch (status) {
-      case "pending": return "bg-status-warning text-foreground";
-      case "picked_up": return "bg-status-info text-white";
-      case "on_the_way": return "bg-status-process text-white";
-      case "delivered": return "bg-status-success text-white";
-    }
+  const handleDeliver = (d: Delivery) => {
+    setConfirmDialog({
+      open: true,
+      title: "Mark delivered",
+      description: `Confirm delivery of order #${d.orderNumber}?`,
+      action: () =>
+        deliver.mutate(d.id, {
+          onSuccess: () => {
+            setSelectedDelivery(null);
+            setToast({ open: true, type: "success", title: "Delivered", message: `Order #${d.orderNumber} marked as delivered.` });
+          },
+          onError: (e: Error) =>
+            setToast({ open: true, type: "error", title: "Failed", message: e.message }),
+        }),
+    });
   };
 
-  const getStatusLabel = (status: DeliveryOrder["status"]) => {
-    switch (status) {
-      case "pending": return "Awaiting Pickup";
-      case "picked_up": return "Picked Up";
-      case "on_the_way": return "On The Way";
-      case "delivered": return "Delivered";
-    }
-  };
-
-  const newOrders = deliveries.filter((d) => d.status === "pending");
-  const deliveringOrders = deliveries.filter((d) => ["picked_up", "on_the_way"].includes(d.status));
-
-  const totalDeliveries = completed.length + deliveringOrders.length;
-  const avgDeliveryTime = 18;
-  const onTimeRate = 92;
-
-  const DeliveryCard = ({ delivery }: { delivery: DeliveryOrder }) => {
-    const remaining = getRemainingSeconds(delivery);
-    const isDelayed = remaining < 0;
-
-    return (
-      <div 
-        onClick={() => setSelectedDelivery(delivery)} 
-        className="bg-card border border-border rounded-2xl p-5 cursor-pointer transition-all hover:border-primary/30 hover:shadow-md"
-      >
-        <div className="flex items-start justify-between mb-3">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="font-semibold text-foreground">{delivery.id}</span>
-              <Badge className={`${getStatusColor(delivery.status)} rounded-lg`}>{getStatusLabel(delivery.status)}</Badge>
-            </div>
-            <p className="text-base font-medium text-foreground">{delivery.customerName}</p>
-          </div>
-          <div className="text-right">
-            <p className="text-lg font-bold text-foreground">₦{delivery.total.toLocaleString()}</p>
-            <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-              <MapPin className="w-3 h-3" />
-              {delivery.distance}
-            </div>
-          </div>
-        </div>
-
-        {delivery.status !== "delivered" && (
-          <div className={`flex items-center gap-2 mb-3 p-3 rounded-xl ${isDelayed ? "bg-destructive/10" : "bg-muted"}`}>
-            {isDelayed ? <AlertTriangle className="w-4 h-4 text-destructive" /> : <Timer className="w-4 h-4 text-muted-foreground" />}
-            <span className={`font-mono font-bold ${isDelayed ? "text-destructive" : "text-foreground"}`}>{formatCountdown(remaining)}</span>
-            {isDelayed && <Badge className="bg-destructive text-destructive-foreground text-xs rounded-lg">DELAYED</Badge>}
-          </div>
-        )}
-
-        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-          <MapPin className="w-4 h-4 flex-shrink-0" />
-          <span className="truncate">{delivery.address}</span>
-        </div>
-        
-        <div className="flex items-center gap-4 text-sm">
-          <div className="flex items-center gap-1 text-muted-foreground">
-            <Package className="w-4 h-4" />
-            {delivery.items.length} items
-          </div>
-          {delivery.notes && (
-            <span className="text-status-warning text-xs">Has notes</span>
-          )}
-        </div>
-      </div>
+  const submitFail = () => {
+    if (!failModal.deliveryId || !failReason.trim()) return;
+    fail.mutate(
+      { id: failModal.deliveryId, reason: failReason.trim() },
+      {
+        onSuccess: () => {
+          setFailModal({ open: false, deliveryId: null });
+          setFailReason("");
+          setSelectedDelivery(null);
+          setToast({ open: true, type: "warning", title: "Marked as failed" });
+        },
+        onError: (e: Error) =>
+          setToast({ open: true, type: "error", title: "Failed", message: e.message }),
+      },
     );
+  };
+
+  const statusBadge = (status: Delivery["status"]) => {
+    switch (status) {
+      case "assigned":
+        return <Badge className="bg-status-warning/10 text-status-warning">Assigned</Badge>;
+      case "in_transit":
+        return <Badge className="bg-status-info/10 text-status-info">In transit</Badge>;
+      case "delivered":
+        return (
+          <Badge className="bg-status-success/10 text-status-success">
+            <CheckCircle2 className="w-3 h-3 mr-1" /> Delivered
+          </Badge>
+        );
+      case "failed":
+        return (
+          <Badge className="bg-destructive/10 text-destructive">
+            <XCircle className="w-3 h-3 mr-1" /> Failed
+          </Badge>
+        );
+      default:
+        return <Badge>{status}</Badge>;
+    }
   };
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="bg-card border-b border-border px-4 sm:px-6 py-4 sticky top-0 z-40">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-muted rounded-xl transition-colors">
-              <ArrowLeft className="w-5 h-5 text-foreground" />
-            </button>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-category-peach flex items-center justify-center">
-                <Bike className="w-5 h-5 text-category-peach" />
-              </div>
-              <div>
-                <h1 className="text-lg font-bold text-foreground">Delivery Rider</h1>
-                <p className="text-xs text-muted-foreground">{deliveries.filter((d) => d.status !== "delivered").length} Active Deliveries</p>
+      <header className="bg-card border-b border-border sticky top-0 z-50">
+        <div className="px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => navigate("/dashboard")}
+                className="p-2 hover:bg-muted rounded-xl transition-colors"
+              >
+                <ArrowLeft className="w-5 h-5 text-foreground" />
+              </button>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
+                  <Bike className="w-5 h-5 text-foreground" />
+                </div>
+                <div>
+                  <h1 className="text-lg font-bold text-foreground">My Deliveries</h1>
+                  <p className="text-xs text-muted-foreground">
+                    {active.length} active • {completed.length} completed today
+                  </p>
+                </div>
               </div>
             </div>
+            <ActivityLogButton onClick={() => setShowActivityLog(true)} />
           </div>
-          <ActivityLogButton onClick={() => setShowActivityLog(true)} />
         </div>
       </header>
 
-      <main className="page-container max-w-7xl mx-auto">
-        {/* Stats */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          <div className="bg-card border border-border rounded-2xl p-5 text-center">
-            <p className="text-3xl font-bold text-foreground">{totalDeliveries}</p>
-            <p className="text-sm text-muted-foreground mt-1">Today's Deliveries</p>
-          </div>
-          <div className="bg-card border border-border rounded-2xl p-5 text-center">
-            <p className="text-3xl font-bold text-foreground">{avgDeliveryTime}m</p>
-            <p className="text-sm text-muted-foreground mt-1">Avg. Time</p>
-          </div>
-          <div className="bg-card border border-border rounded-2xl p-5 text-center">
-            <p className="text-3xl font-bold text-status-success">{onTimeRate}%</p>
-            <p className="text-sm text-muted-foreground mt-1">On-Time Rate</p>
-          </div>
-        </div>
-
-        {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="bg-muted h-11 w-full mb-4">
-            <TabsTrigger value="new" className="flex-1 gap-2 rounded-lg">
-              New
-              <Badge variant="secondary" className="h-5 px-1.5">{newOrders.length}</Badge>
+      <main className="page-container max-w-5xl mx-auto">
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "active" | "completed")}>
+          <TabsList className="bg-secondary/50 p-1 rounded-xl">
+            <TabsTrigger value="active" className="rounded-lg data-[state=active]:bg-card">
+              <Bike className="w-4 h-4 mr-1" />
+              Active ({active.length})
             </TabsTrigger>
-            <TabsTrigger value="delivering" className="flex-1 gap-2 rounded-lg">
-              Delivering
-              <Badge variant="secondary" className="h-5 px-1.5">{deliveringOrders.length}</Badge>
-            </TabsTrigger>
-            <TabsTrigger value="completed" className="flex-1 gap-2 rounded-lg">
-              Completed
-              <Badge variant="secondary" className="h-5 px-1.5">{completed.length}</Badge>
+            <TabsTrigger value="completed" className="rounded-lg data-[state=active]:bg-card">
+              <CheckCircle2 className="w-4 h-4 mr-1" />
+              Today ({completed.length})
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="new">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {newOrders.length === 0 ? (
-                <div className="col-span-full bg-card border border-border rounded-2xl p-16 text-center">
-                  <Package className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-30" />
-                  <h3 className="text-lg font-semibold text-foreground mb-2">No New Deliveries</h3>
-                  <p className="text-muted-foreground">New delivery orders will appear here</p>
-                </div>
-              ) : newOrders.map((delivery) => <DeliveryCard key={delivery.id} delivery={delivery} />)}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="delivering">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {deliveringOrders.length === 0 ? (
-                <div className="col-span-full bg-card border border-border rounded-2xl p-16 text-center">
-                  <Bike className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-30" />
-                  <h3 className="text-lg font-semibold text-foreground mb-2">No Active Deliveries</h3>
-                  <p className="text-muted-foreground">Pick up orders to start delivering</p>
-                </div>
-              ) : deliveringOrders.map((delivery) => <DeliveryCard key={delivery.id} delivery={delivery} />)}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="completed">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {completed.map((delivery) => (
-                <div key={delivery.id} className="bg-card border border-border rounded-2xl p-5 opacity-70">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-semibold text-foreground">{delivery.id}</span>
-                    <Badge className="bg-status-success text-white rounded-lg">
-                      <CheckCircle2 className="w-3 h-3 mr-1" />
-                      Delivered
-                    </Badge>
+          <TabsContent value="active" className="mt-6">
+            {isLoading && (
+              <p className="text-center text-muted-foreground py-8">Loading deliveries...</p>
+            )}
+            {!isLoading && active.length === 0 && (
+              <div className="bg-card border border-border rounded-2xl p-12 text-center">
+                <Bike className="w-16 h-16 mx-auto mb-3 opacity-30" />
+                <p className="text-muted-foreground">No active deliveries assigned to you.</p>
+              </div>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {active.map((d) => (
+                <button
+                  key={d.id}
+                  onClick={() => setSelectedDelivery(d)}
+                  className="bg-card border border-border rounded-2xl p-4 text-left hover:border-primary/40 transition-colors"
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <h3 className="font-bold text-foreground">#{d.orderNumber}</h3>
+                      <p className="text-sm text-muted-foreground">
+                        {d.customerName ?? "Customer"}
+                      </p>
+                    </div>
+                    {statusBadge(d.status)}
                   </div>
-                  <p className="text-sm text-foreground font-medium">{delivery.customerName}</p>
-                  <p className="text-xs text-muted-foreground">{delivery.address}</p>
-                  <p className="text-sm font-bold text-foreground mt-2">₦{delivery.total.toLocaleString()}</p>
+                  <div className="flex items-start gap-2 text-xs text-muted-foreground mb-2">
+                    <MapPin className="w-3 h-3 mt-0.5 shrink-0" />
+                    <span className="line-clamp-2">{d.address}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3 h-3" /> {elapsedMin(d.createdAt)} min ago
+                    </span>
+                    {d.phone && (
+                      <span className="flex items-center gap-1">
+                        <Phone className="w-3 h-3" /> {d.phone}
+                      </span>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="completed" className="mt-6">
+            <div className="space-y-2">
+              {completed.length === 0 && (
+                <p className="text-center text-muted-foreground py-8">
+                  No completed deliveries yet today.
+                </p>
+              )}
+              {completed.map((d) => (
+                <div
+                  key={d.id}
+                  className="bg-card border border-border rounded-xl p-3 flex items-center justify-between"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold">#{d.orderNumber}</span>
+                      {statusBadge(d.status)}
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate mt-1">
+                      {d.customerName ?? "Customer"} • {d.address}
+                    </p>
+                    {d.failureReason && (
+                      <p className="text-xs text-destructive italic mt-1">
+                        {d.failureReason}
+                      </p>
+                    )}
+                  </div>
+                  <span className="text-xs text-muted-foreground whitespace-nowrap ml-4">
+                    {d.deliveredAt
+                      ? new Date(d.deliveredAt).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
+                      : ""}
+                  </span>
                 </div>
               ))}
             </div>
@@ -291,32 +278,156 @@ const DeliveryPage = () => {
         </Tabs>
       </main>
 
-      <DeliveryModal delivery={selectedDelivery} onClose={() => setSelectedDelivery(null)} onUpdateStatus={updateStatus} />
-      <ConfirmDialog open={confirmDialog.open} onOpenChange={(open) => setConfirmDialog({ ...confirmDialog, open })} title={confirmDialog.title} description={confirmDialog.description} onConfirm={() => { confirmDialog.action(); setConfirmDialog({ ...confirmDialog, open: false }); }} />
-      <ActivityLog open={showActivityLog} onClose={() => setShowActivityLog(false)} pageName="Delivery Rider" />
-      
-      {/* Delivery Notification Popup */}
-      <DeliveryNotificationPopup
-        notification={deliveryNotification}
-        onDismiss={() => setDeliveryNotification(null)}
-        onAccept={() => {
-          if (deliveryNotification) {
-            const newDelivery: DeliveryOrder = {
-              id: deliveryNotification.orderNumber,
-              customerName: deliveryNotification.customerName,
-              phone: "+234 801 234 5678",
-              address: deliveryNotification.address,
-              items: [`${deliveryNotification.items} items`],
-              total: deliveryNotification.total,
-              status: "pending",
-              startTime: new Date(),
-              estimatedMinutes: 20,
-              distance: deliveryNotification.distance,
-            };
-            setDeliveries(prev => [newDelivery, ...prev]);
-            setDeliveryNotification(null);
-          }
+      <Dialog open={!!selectedDelivery} onOpenChange={() => setSelectedDelivery(null)}>
+        <DialogContent className="rounded-2xl max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delivery #{selectedDelivery?.orderNumber}</DialogTitle>
+          </DialogHeader>
+          {selectedDelivery && (
+            <div className="space-y-4">
+              <div className="bg-secondary/50 rounded-xl p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-foreground">
+                    {selectedDelivery.customerName ?? "Customer"}
+                  </span>
+                  {statusBadge(selectedDelivery.status)}
+                </div>
+                {selectedDelivery.phone && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Phone className="w-4 h-4" />
+                    <a href={`tel:${selectedDelivery.phone}`} className="text-primary">
+                      {selectedDelivery.phone}
+                    </a>
+                  </div>
+                )}
+                <div className="flex items-start gap-2 text-sm text-muted-foreground">
+                  <MapPin className="w-4 h-4 mt-0.5 shrink-0" />
+                  <span>{selectedDelivery.address}</span>
+                </div>
+                {selectedDelivery.notes && (
+                  <div className="flex items-start gap-2 text-sm text-status-warning">
+                    <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                    <span>{selectedDelivery.notes}</span>
+                  </div>
+                )}
+              </div>
+
+              {selectedDelivery.latitude && selectedDelivery.longitude && (
+                <Button
+                  variant="outline"
+                  className="w-full rounded-xl"
+                  onClick={() =>
+                    window.open(
+                      `https://maps.google.com/?q=${selectedDelivery.latitude},${selectedDelivery.longitude}`,
+                      "_blank",
+                    )
+                  }
+                >
+                  <Navigation className="w-4 h-4 mr-2" />
+                  Open in Maps
+                </Button>
+              )}
+
+              <div className="flex flex-col gap-2">
+                {selectedDelivery.status === "assigned" && (
+                  <Button
+                    className="rounded-xl"
+                    onClick={() => handlePickup(selectedDelivery)}
+                    disabled={pickup.isPending}
+                  >
+                    Mark picked up
+                  </Button>
+                )}
+                {selectedDelivery.status === "in_transit" && (
+                  <Button
+                    className="rounded-xl bg-status-success text-white hover:bg-status-success/90"
+                    onClick={() => handleDeliver(selectedDelivery)}
+                    disabled={deliver.isPending}
+                  >
+                    Mark delivered
+                  </Button>
+                )}
+                {(selectedDelivery.status === "assigned" ||
+                  selectedDelivery.status === "in_transit") && (
+                  <Button
+                    variant="outline"
+                    className="rounded-xl border-destructive text-destructive hover:bg-destructive/10"
+                    onClick={() =>
+                      setFailModal({ open: true, deliveryId: selectedDelivery.id })
+                    }
+                  >
+                    Mark failed
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={failModal.open}
+        onOpenChange={(open) => setFailModal({ open, deliveryId: open ? failModal.deliveryId : null })}
+      >
+        <DialogContent className="rounded-2xl max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Mark delivery as failed</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Provide a reason — this will be recorded in the activity log.
+            </p>
+            <Input
+              placeholder="e.g. Customer not at address"
+              value={failReason}
+              onChange={(e) => setFailReason(e.target.value)}
+              className="rounded-xl"
+            />
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1 rounded-xl"
+                onClick={() => {
+                  setFailModal({ open: false, deliveryId: null });
+                  setFailReason("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1 rounded-xl"
+                onClick={submitFail}
+                disabled={!failReason.trim() || fail.isPending}
+              >
+                Submit
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        open={confirmDialog.open}
+        onOpenChange={(open) => setConfirmDialog({ ...confirmDialog, open })}
+        title={confirmDialog.title}
+        description={confirmDialog.description}
+        onConfirm={() => {
+          confirmDialog.action();
+          setConfirmDialog({ ...confirmDialog, open: false });
         }}
+      />
+      <ToastNotification
+        open={toast.open}
+        onClose={() => setToast({ ...toast, open: false })}
+        type={toast.type}
+        title={toast.title}
+        message={toast.message}
+      />
+      <ActivityLog
+        open={showActivityLog}
+        onClose={() => setShowActivityLog(false)}
+        pageName="Deliveries"
+        resourceType="delivery"
       />
     </div>
   );

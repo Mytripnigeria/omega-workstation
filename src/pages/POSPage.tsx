@@ -64,6 +64,7 @@ import KeyboardShortcutsModal from "@/components/KeyboardShortcutsModal";
 import StaffFinancePanel from "@/components/StaffFinancePanel";
 import { useBeepSound } from "@/hooks/useBeepSound";
 import { useCategories } from "@/hooks/useCategories";
+import { useCreateOrder, useOrders } from "@/hooks/useOrders";
 import CategoryLoadError from "@/components/CategoryLoadError";
 
 interface Variation {
@@ -176,15 +177,6 @@ const menuItems: MenuItem[] = [
   { id: "52", name: "Agege Bread & Butter", price: 500, category: "desserts", image: "🍞", description: "Soft sweet bread with Blue Band butter" },
 ];
 
-const mockIncomingOrders: IncomingOrder[] = [
-  { id: "#ORD001", source: "pos", customerName: "Walk-in", items: [{ name: "Jollof Rice (L)", quantity: 1, price: 4500 }, { name: "Chapman", quantity: 2, price: 1500 }], total: 7500, time: "2 min ago", startTime: new Date(Date.now() - 2 * 60000), estimatedMinutes: 15, status: "preparing", tableNumber: "5", orderType: "dine-in", billType: "process" },
-  { id: "#ORD002", source: "website", customerName: "Jane Okafor", items: [{ name: "Fried Rice (M)", quantity: 2, price: 3500 }, { name: "Grilled Chicken", quantity: 2, price: 2800 }], total: 12600, time: "5 min ago", startTime: new Date(Date.now() - 5 * 60000), estimatedMinutes: 20, status: "pending", orderType: "delivery", billType: "process" },
-];
-
-const mockOrderHistory = [
-  { id: "#ORD098", customerName: "Ada Eze", items: [{ name: "Jollof Rice", quantity: 2, price: 3500 }], total: 7000, time: "1 hour ago", status: "completed", source: "POS" },
-];
-
 const POSPage = () => {
   const navigate = useNavigate();
   const [posMode, setPosMode] = useState<"counter" | "selfservice">("counter");
@@ -209,7 +201,29 @@ const POSPage = () => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [activeTab, setActiveTab] = useState("menu");
-  const [incomingOrders, setIncomingOrders] = useState<IncomingOrder[]>(mockIncomingOrders);
+  // Real incoming orders for this store, polled every 5s.
+  const { data: ordersPage } = useOrders({ status: "pending,preparing,ready", limit: 20 }, 5000);
+  const incomingOrders: IncomingOrder[] = (ordersPage?.data ?? []).map((o) => ({
+    id: `#${o.orderNumber}`,
+    source: o.channel === "website" ? "website" : o.channel === "phone" ? "phone" : "pos",
+    customerName: o.customerName ?? "Walk-in",
+    items: o.items.map((i) => ({ name: i.name, quantity: i.quantity, price: Number(i.unitPrice) })),
+    total: Number(o.total),
+    time: new Date(o.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    startTime: new Date(o.createdAt),
+    estimatedMinutes: 15,
+    status: o.status === "ready" ? "ready" : o.status === "preparing" ? "preparing" : "pending",
+    tableNumber: o.tableNumber ?? undefined,
+    orderType: o.isDelivery ? "delivery" : o.tableNumber ? "dine-in" : "takeaway",
+    billType: "process",
+  }));
+  // Stub setter to keep existing local UI flows compiling for now (e.g. holdOrder).
+  // The real data is sourced from the API hook above; transient UI-only states (holds)
+  // would need a dedicated module to persist across sessions — out of scope for Phase 3.
+  const setIncomingOrders = (_updater: unknown) => {
+    void _updater;
+  };
+  const createOrderMutation = useCreateOrder();
   const [autoAccept, setAutoAccept] = useState(false);
   const [discount, setDiscount] = useState(0);
   const [showDiscountModal, setShowDiscountModal] = useState(false);
@@ -248,33 +262,7 @@ const POSPage = () => {
 
   const playBeep = useBeepSound();
 
-  // Simulate incoming orders from external platforms
-  useEffect(() => {
-    const simulateExternalOrder = () => {
-      const sources: ("ubereats" | "deliveroo" | "website")[] = ["ubereats", "deliveroo", "website"];
-      const randomSource = sources[Math.floor(Math.random() * sources.length)];
-      const orderNumber = `#EXT${Date.now().toString().slice(-4)}`;
-      
-      setOrderNotification({
-        id: orderNumber,
-        orderNumber,
-        source: randomSource,
-        customerName: ["Ada Eze", "Chidi Obi", "Amaka Nweke"][Math.floor(Math.random() * 3)],
-        itemCount: Math.floor(Math.random() * 5) + 1,
-        total: Math.floor(Math.random() * 10000) + 3000,
-        timestamp: new Date(),
-      });
-    };
-
-    // Simulate an order after 30 seconds, then every 2 minutes
-    const initialTimeout = setTimeout(simulateExternalOrder, 30000);
-    const interval = setInterval(simulateExternalOrder, 120000);
-
-    return () => {
-      clearTimeout(initialTimeout);
-      clearInterval(interval);
-    };
-  }, []);
+  // External-order push notifications wire in once webhook delivery is real (Phase 4+).
 
 
   const filteredItems = menuItems.filter((item) => {
@@ -320,60 +308,96 @@ const POSPage = () => {
   const tax = (subtotal - discount) * 0.075;
   const total = subtotal - discount + tax;
 
+  // Submit the cart to the backend as a real Order. Returns the displayable
+  // IncomingOrder used by the receipt modal (built from the API response).
+  const submitOrder = async (
+    isDelivery: boolean,
+    extraNotes?: string,
+  ): Promise<IncomingOrder | null> => {
+    if (cart.length === 0) return null;
+    try {
+      const order = await createOrderMutation.mutateAsync({
+        channel: posMode === "selfservice" ? "website" : "pos",
+        isDelivery,
+        customerName: customerName || undefined,
+        tableNumber: orderType === "dine-in" ? undefined : undefined,
+        notes: extraNotes,
+        taxAmount: tax,
+        discountAmount: discount,
+        items: cart.map((c) => ({
+          productId: c.menuItemId,
+          name: c.variationText ? `${c.name} (${c.variationText})` : c.name,
+          quantity: c.quantity,
+          unitPrice: c.price,
+        })),
+      });
+      const display: IncomingOrder = {
+        id: `#${order.orderNumber}`,
+        source: "pos",
+        customerName: order.customerName ?? "Walk-in",
+        items: order.items.map((i) => ({
+          name: i.name,
+          quantity: i.quantity,
+          price: Number(i.unitPrice),
+        })),
+        total: Number(order.total),
+        time: "Just now",
+        startTime: new Date(order.createdAt),
+        estimatedMinutes: 15,
+        status: "pending",
+        tableNumber: order.tableNumber ?? undefined,
+        orderType: isDelivery ? "delivery" : order.tableNumber ? "dine-in" : "takeaway",
+        billType: "process",
+      };
+      return display;
+    } catch (err) {
+      setToast({
+        open: true,
+        type: "error",
+        title: "Order failed",
+        message: (err as Error).message,
+      });
+      return null;
+    }
+  };
+
   const handleQuickBill = () => {
     if (cart.length === 0) return;
     setConfirmDialog({
-      open: true, title: "Quick Bill", description: "This will complete the order immediately without sending to kitchen. Continue?",
-      action: () => {
-        const newOrder: IncomingOrder = {
-          id: `#QB${Date.now().toString().slice(-4)}`,
-          source: "pos",
-          customerName: customerName || "Walk-in",
-          items: cart.map((c) => ({ name: c.name, quantity: c.quantity, price: c.price, variationText: c.variationText })),
-          total: total,
-          time: "Just now",
-          startTime: new Date(),
-          estimatedMinutes: 0,
-          status: "ready",
-          orderType,
-          billType: "quick",
-        };
-        setCurrentReceipt(newOrder);
-        setShowReceiptModal(true);
-        setToast({ open: true, type: "success", title: "Order Completed!", message: "Quick bill has been processed" });
-        setCart([]);
-        setDiscount(0);
-        setCustomerName("");
-      }
+      open: true,
+      title: "Quick Bill",
+      description: "Submit this order. Continue?",
+      action: async () => {
+        const display = await submitOrder(orderType === "delivery");
+        if (display) {
+          setCurrentReceipt(display);
+          setShowReceiptModal(true);
+          setToast({ open: true, type: "success", title: "Order Submitted", message: `Order ${display.id} placed.` });
+          setCart([]);
+          setDiscount(0);
+          setCustomerName("");
+        }
+      },
     });
   };
 
   const handleProcessBill = () => {
     if (cart.length === 0) return;
     setConfirmDialog({
-      open: true, title: "Process Bill", description: "This will send the order to the kitchen for preparation. Continue?",
-      action: () => {
-        const newOrder: IncomingOrder = {
-          id: `#ORD${Date.now().toString().slice(-4)}`,
-          source: "pos",
-          customerName: customerName || "Walk-in",
-          items: cart.map((c) => ({ name: c.name, quantity: c.quantity, price: c.price, variationText: c.variationText })),
-          total: total,
-          time: "Just now",
-          startTime: new Date(),
-          estimatedMinutes: 15,
-          status: "preparing",
-          orderType,
-          billType: "process",
-        };
-        setIncomingOrders((prev) => [newOrder, ...prev]);
-        setCurrentReceipt(newOrder);
-        setShowReceiptModal(true);
-        setToast({ open: true, type: "success", title: "Order Sent!", message: "Order has been sent to the kitchen" });
-        setCart([]);
-        setDiscount(0);
-        setCustomerName("");
-      }
+      open: true,
+      title: "Process Bill",
+      description: "Send the order to the kitchen?",
+      action: async () => {
+        const display = await submitOrder(orderType === "delivery");
+        if (display) {
+          setCurrentReceipt(display);
+          setShowReceiptModal(true);
+          setToast({ open: true, type: "success", title: "Order Sent", message: `${display.id} sent to kitchen.` });
+          setCart([]);
+          setDiscount(0);
+          setCustomerName("");
+        }
+      },
     });
   };
 
@@ -382,28 +406,17 @@ const POSPage = () => {
     setShowPaymentModal(true);
   };
 
-  const handlePaymentConfirmed = () => {
-    const newOrder: IncomingOrder = {
-      id: `#SS${Date.now().toString().slice(-4)}`,
-      source: "selfservice",
-      customerName: customerName || "Self-Service",
-      items: cart.map((c) => ({ name: c.name, quantity: c.quantity, price: c.price })),
-      total: total,
-      time: "Just now",
-      startTime: new Date(),
-      estimatedMinutes: 15,
-      status: "pending",
-      orderType: "takeaway",
-      billType: "process",
-    };
-    setIncomingOrders((prev) => [newOrder, ...prev]);
-    setShowPaymentModal(false);
-    setSelfServiceReceipt(newOrder);
-    setShowReceiptModal(true);
-    setToast({ open: true, type: "success", title: "Order Placed!", message: "Your order has been sent to the counter" });
-    setCart([]);
-    setDiscount(0);
-    setCustomerName("");
+  const handlePaymentConfirmed = async () => {
+    const display = await submitOrder(false);
+    if (display) {
+      setShowPaymentModal(false);
+      setSelfServiceReceipt(display);
+      setShowReceiptModal(true);
+      setToast({ open: true, type: "success", title: "Order Placed!", message: "Your order has been sent to the counter" });
+      setCart([]);
+      setDiscount(0);
+      setCustomerName("");
+    }
   };
 
   const copyAccountNumber = () => {
@@ -1062,7 +1075,7 @@ const POSPage = () => {
       <ConfirmDialog open={confirmDialog.open} onOpenChange={(open) => setConfirmDialog({ ...confirmDialog, open })} title={confirmDialog.title} description={confirmDialog.description} onConfirm={() => { confirmDialog.action(); setConfirmDialog({ ...confirmDialog, open: false }); }} />
       <ToastNotification open={toast.open} onClose={() => setToast({ ...toast, open: false })} type={toast.type} title={toast.title} message={toast.message} />
       <DiscountModal open={showDiscountModal} onClose={() => setShowDiscountModal(false)} subtotal={subtotal} onApplyDiscount={setDiscount} />
-      <OrderHistoryModal open={showHistoryModal} onClose={() => setShowHistoryModal(false)} orders={mockOrderHistory} onRecallOrder={(o) => { }} onPrintReceipt={(o) => { }} />
+      <OrderHistoryModal open={showHistoryModal} onClose={() => setShowHistoryModal(false)} />
       {currentReceipt && <ReceiptModal open={showReceiptModal} onClose={() => { setShowReceiptModal(false); setCurrentReceipt(null); setSelfServiceReceipt(null); }} orderId={currentReceipt.id} items={currentReceipt.items} subtotal={currentReceipt.total * 0.925} tax={currentReceipt.total * 0.075} total={currentReceipt.total} customerName={currentReceipt.customerName} />}
       {selfServiceReceipt && !currentReceipt && <ReceiptModal open={showReceiptModal} onClose={() => { setShowReceiptModal(false); setSelfServiceReceipt(null); }} orderId={selfServiceReceipt.id} items={selfServiceReceipt.items} subtotal={selfServiceReceipt.total * 0.925} tax={selfServiceReceipt.total * 0.075} total={selfServiceReceipt.total} customerName={selfServiceReceipt.customerName} />}
       
