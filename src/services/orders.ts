@@ -47,10 +47,18 @@ export const ordersService = {
       body: JSON.stringify({ reason }),
     }),
 
-  recordPayment: (id: string, amount?: number, paymentMethodId?: string): Promise<Order> =>
+  recordPayment: (
+    id: string,
+    payload: {
+      amount?: number;
+      paymentMethodId?: string;
+      paymentChannel?: "paystack" | "card" | "cash" | "wallet" | "points";
+      paymentReference?: string;
+    },
+  ): Promise<Order> =>
     workstationApi.request<Order>(`/orders/${id}/payment`, {
       method: "POST",
-      body: JSON.stringify({ amount, paymentMethodId }),
+      body: JSON.stringify(payload),
     }),
 
   updateItemPrep: (id: string, itemId: string, prepStatus: PrepStatus): Promise<OrderItem> =>

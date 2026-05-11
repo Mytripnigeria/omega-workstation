@@ -63,13 +63,14 @@ export function useRecordPayment() {
   return useMutation({
     mutationFn: ({
       id,
-      amount,
-      paymentMethodId,
+      ...payload
     }: {
       id: string;
       amount?: number;
       paymentMethodId?: string;
-    }) => ordersService.recordPayment(id, amount, paymentMethodId),
+      paymentChannel?: "paystack" | "card" | "cash" | "wallet" | "points";
+      paymentReference?: string;
+    }) => ordersService.recordPayment(id, payload),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["orders"] }),
   });
 }

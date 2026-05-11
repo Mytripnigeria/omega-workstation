@@ -18,11 +18,9 @@ import {
   RotateCcw,
   Printer,
   Bell,
-  Clock,
   User,
   Zap,
   Wallet,
-  Copy,
   Check,
   X,
   Users,
@@ -64,8 +62,13 @@ import KeyboardShortcutsModal from "@/components/KeyboardShortcutsModal";
 import StaffFinancePanel from "@/components/StaffFinancePanel";
 import { useBeepSound } from "@/hooks/useBeepSound";
 import { useCategories } from "@/hooks/useCategories";
-import { useCreateOrder, useOrders } from "@/hooks/useOrders";
+import { useCreateOrder, useOrders, useRecordPayment } from "@/hooks/useOrders";
 import { workstationAuth } from "@/services/api";
+import {
+  getPaystackPublicKey,
+  newPaystackReference,
+  openPaystackCheckout,
+} from "@/services/paystack";
 import CategoryLoadError from "@/components/CategoryLoadError";
 
 interface Variation {
@@ -225,6 +228,7 @@ const POSPage = () => {
     void _updater;
   };
   const createOrderMutation = useCreateOrder();
+  const recordPaymentMutation = useRecordPayment();
   const [autoAccept, setAutoAccept] = useState(false);
   const [discount, setDiscount] = useState(0);
   const [showDiscountModal, setShowDiscountModal] = useState(false);
@@ -235,7 +239,6 @@ const POSPage = () => {
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; description: string; action: () => void }>({ open: false, title: "", description: "", action: () => {} });
   const [toast, setToast] = useState<{ open: boolean; type: "success" | "error" | "warning" | "info"; title: string; message?: string }>({ open: false, type: "success", title: "" });
   const [currentReceipt, setCurrentReceipt] = useState<IncomingOrder | null>(null);
-  const [copied, setCopied] = useState(false);
   const [showActivityLog, setShowActivityLog] = useState(false);
   const [orderNotification, setOrderNotification] = useState<{
     id: string;
@@ -250,17 +253,13 @@ const POSPage = () => {
   
   const [orderType, setOrderType] = useState<"dine-in" | "takeaway" | "delivery">("dine-in");
   const [customerName, setCustomerName] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
+  const [payingWithPaystack, setPayingWithPaystack] = useState(false);
 
   // Manager-only UI affordances. Permissions live on the staff JWT payload.
   const sessionStaff = workstationAuth.getStaff();
   const currentStaffId = sessionStaff?.id ?? "";
   const isManager = !!sessionStaff?.permissions?.includes("manage_orders");
-
-  const virtualAccount = {
-    bank: "Wema Bank",
-    accountNumber: "8234567890",
-    accountName: "Toasty Foods Ltd",
-  };
 
   const playBeep = useBeepSound();
 
@@ -310,12 +309,12 @@ const POSPage = () => {
   const tax = (subtotal - discount) * 0.075;
   const total = subtotal - discount + tax;
 
-  // Submit the cart to the backend as a real Order. Returns the displayable
-  // IncomingOrder used by the receipt modal (built from the API response).
+  // Submit the cart to the backend as a real Order. Returns the API order
+  // plus the displayable IncomingOrder used by the receipt modal.
   const submitOrder = async (
     isDelivery: boolean,
     extraNotes?: string,
-  ): Promise<IncomingOrder | null> => {
+  ): Promise<{ order: Awaited<ReturnType<typeof createOrderMutation.mutateAsync>>; display: IncomingOrder } | null> => {
     if (cart.length === 0) return null;
     try {
       const order = await createOrderMutation.mutateAsync({
@@ -351,7 +350,7 @@ const POSPage = () => {
         orderType: isDelivery ? "delivery" : order.tableNumber ? "dine-in" : "takeaway",
         billType: "process",
       };
-      return display;
+      return { order, display };
     } catch (err) {
       setToast({
         open: true,
@@ -370,11 +369,11 @@ const POSPage = () => {
       title: "Quick Bill",
       description: "Submit this order. Continue?",
       action: async () => {
-        const display = await submitOrder(orderType === "delivery");
-        if (display) {
-          setCurrentReceipt(display);
+        const result = await submitOrder(orderType === "delivery");
+        if (result) {
+          setCurrentReceipt(result.display);
           setShowReceiptModal(true);
-          setToast({ open: true, type: "success", title: "Order Submitted", message: `Order ${display.id} placed.` });
+          setToast({ open: true, type: "success", title: "Order Submitted", message: `Order ${result.display.id} placed.` });
           setCart([]);
           setDiscount(0);
           setCustomerName("");
@@ -390,11 +389,11 @@ const POSPage = () => {
       title: "Process Bill",
       description: "Send the order to the kitchen?",
       action: async () => {
-        const display = await submitOrder(orderType === "delivery");
-        if (display) {
-          setCurrentReceipt(display);
+        const result = await submitOrder(orderType === "delivery");
+        if (result) {
+          setCurrentReceipt(result.display);
           setShowReceiptModal(true);
-          setToast({ open: true, type: "success", title: "Order Sent", message: `${display.id} sent to kitchen.` });
+          setToast({ open: true, type: "success", title: "Order Sent", message: `${result.display.id} sent to kitchen.` });
           setCart([]);
           setDiscount(0);
           setCustomerName("");
@@ -408,23 +407,96 @@ const POSPage = () => {
     setShowPaymentModal(true);
   };
 
+  /**
+   * Self-service Paystack flow. We pay first, then create the order. This
+   * avoids leaving abandoned pending orders behind when a customer cancels
+   * the popup. On verified payment we create the order and immediately
+   * record it as paid with the Paystack reference, which fires the merchant
+   * wallet credit on the backend.
+   */
   const handlePaymentConfirmed = async () => {
-    const display = await submitOrder(false);
-    if (display) {
-      setShowPaymentModal(false);
-      setSelfServiceReceipt(display);
-      setShowReceiptModal(true);
-      setToast({ open: true, type: "success", title: "Order Placed!", message: "Your order has been sent to the counter" });
-      setCart([]);
-      setDiscount(0);
-      setCustomerName("");
+    if (!customerEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail)) {
+      setToast({
+        open: true,
+        type: "error",
+        title: "Email required",
+        message: "Enter a valid email so we can send a receipt.",
+      });
+      return;
     }
-  };
+    if (cart.length === 0) return;
 
-  const copyAccountNumber = () => {
-    navigator.clipboard.writeText(virtualAccount.accountNumber);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setPayingWithPaystack(true);
+    try {
+      const publicKey = await getPaystackPublicKey();
+      const reference = newPaystackReference();
+      const amountKobo = Math.round(total * 100);
+
+      await new Promise<void>((resolve, reject) => {
+        let settled = false;
+        void openPaystackCheckout({
+          email: customerEmail,
+          amountKobo,
+          reference,
+          publicKey,
+          metadata: {
+            source: "workstation-selfservice",
+            customerName: customerName || undefined,
+          },
+          onSuccess: async (ref) => {
+            if (settled) return;
+            settled = true;
+            try {
+              const result = await submitOrder(false);
+              if (!result) throw new Error("Order creation failed after payment");
+
+              // Mark the freshly-created order as paid with the Paystack ref.
+              // This triggers the backend's merchant-wallet credit hook.
+              await recordPaymentMutation.mutateAsync({
+                id: result.order.id,
+                amount: Number(result.order.total),
+                paymentChannel: "paystack",
+                paymentReference: ref,
+              });
+
+              setSelfServiceReceipt(result.display);
+              setShowReceiptModal(true);
+              setShowPaymentModal(false);
+              setToast({
+                open: true,
+                type: "success",
+                title: "Payment Successful",
+                message: `Reference ${ref.slice(0, 12)}…`,
+              });
+              setCart([]);
+              setDiscount(0);
+              setCustomerName("");
+              setCustomerEmail("");
+              resolve();
+            } catch (err) {
+              reject(err);
+            }
+          },
+          onClose: () => {
+            if (settled) return;
+            settled = true;
+            reject(new Error("Payment cancelled"));
+          },
+        });
+      });
+    } catch (err) {
+      const message = (err as Error).message ?? "Payment failed";
+      if (message !== "Payment cancelled") {
+        setToast({
+          open: true,
+          type: "error",
+          title: "Payment failed",
+          message,
+        });
+      }
+    } finally {
+      setPayingWithPaystack(false);
+    }
   };
 
   const holdOrder = () => {
@@ -1020,52 +1092,59 @@ const POSPage = () => {
       </div>
 
       {/* Payment Modal */}
-      <Dialog open={showPaymentModal} onOpenChange={setShowPaymentModal}>
+      <Dialog open={showPaymentModal} onOpenChange={(open) => { if (!payingWithPaystack) setShowPaymentModal(open); }}>
         <DialogContent className="max-w-md rounded-2xl">
           <DialogHeader>
             <DialogTitle className="text-center text-xl">Complete Payment</DialogTitle>
           </DialogHeader>
-          
+
           <div className="space-y-6 py-4">
             <div className="text-center">
               <p className="text-4xl font-bold text-foreground mb-2">₦{Math.round(total).toLocaleString()}</p>
-              <p className="text-sm text-muted-foreground">Transfer to the account below</p>
+              <p className="text-sm text-muted-foreground">Pay securely with your card via Paystack</p>
             </div>
 
-            <div className="bg-muted rounded-2xl p-5 space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground text-sm">Bank</span>
-                <span className="font-medium text-foreground">{virtualAccount.bank}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground text-sm">Account Number</span>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono font-bold text-foreground text-lg">{virtualAccount.accountNumber}</span>
-                  <button 
-                    className="p-2 hover:bg-card rounded-lg transition-colors" 
-                    onClick={copyAccountNumber}
-                  >
-                    {copied ? <Check className="w-4 h-4 text-status-success" /> : <Copy className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground text-sm">Account Name</span>
-                <span className="font-medium text-foreground">{virtualAccount.accountName}</span>
-              </div>
-            </div>
-
-            <div className="bg-status-warning/10 border border-status-warning/20 rounded-xl p-4 text-center">
-              <Clock className="w-5 h-5 text-status-warning mx-auto mb-1" />
-              <p className="text-sm text-foreground">Account expires in 10:00 minutes</p>
+            <div className="space-y-3">
+              <label className="block">
+                <span className="text-sm text-muted-foreground">Your name (optional)</span>
+                <Input
+                  className="h-12 rounded-xl mt-1"
+                  placeholder="Full name"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  disabled={payingWithPaystack}
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm text-muted-foreground">Email — for receipt</span>
+                <Input
+                  className="h-12 rounded-xl mt-1"
+                  type="email"
+                  inputMode="email"
+                  placeholder="you@example.com"
+                  value={customerEmail}
+                  onChange={(e) => setCustomerEmail(e.target.value)}
+                  disabled={payingWithPaystack}
+                />
+              </label>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <Button variant="outline" className="h-12 rounded-xl" onClick={() => setShowPaymentModal(false)}>
+              <Button
+                variant="outline"
+                className="h-12 rounded-xl"
+                onClick={() => setShowPaymentModal(false)}
+                disabled={payingWithPaystack}
+              >
                 Cancel
               </Button>
-              <Button className="h-12 rounded-xl" onClick={handlePaymentConfirmed}>
-                I've Paid
+              <Button
+                className="h-12 rounded-xl"
+                onClick={handlePaymentConfirmed}
+                disabled={payingWithPaystack || cart.length === 0}
+              >
+                <CreditCard className="w-4 h-4 mr-2" />
+                {payingWithPaystack ? "Processing…" : "Pay with Paystack"}
               </Button>
             </div>
           </div>
