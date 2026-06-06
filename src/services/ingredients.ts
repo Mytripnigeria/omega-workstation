@@ -29,10 +29,16 @@ export const ingredientsService = {
     adjustment: number,
     reason?: string,
     expiryDate?: string,
+    /**
+     * Movement classification — pass `'waste'` for spoilage / damage so the
+     * merchant hub Waste Management view picks it up. Omitting it falls back
+     * to INTAKE on positive or CORRECTION on negative.
+     */
+    type?: 'intake' | 'consumption' | 'waste' | 'transfer' | 'correction',
   ): Promise<Ingredient> =>
     workstationApi.request<Ingredient>(`/ingredients/${id}/adjust-stock`, {
       method: 'POST',
-      body: JSON.stringify({ adjustment, reason, expiryDate }),
+      body: JSON.stringify({ adjustment, reason, expiryDate, type }),
     }),
 
   /**

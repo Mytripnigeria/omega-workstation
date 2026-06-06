@@ -123,6 +123,9 @@ const OutstorePage = () => {
         id: adjustModal.item.id,
         adjustment: signed,
         reason: adjustReason.trim() || undefined,
+        // Tag the movement as WASTE so the merchant hub Waste Management view
+        // picks it up. Add/subtract keep the default classification.
+        type: adjustModal.direction === "waste" ? "waste" : undefined,
       },
       {
         onSuccess: () => {

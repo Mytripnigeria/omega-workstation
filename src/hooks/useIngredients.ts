@@ -43,12 +43,15 @@ export function useAdjustStock() {
       adjustment,
       reason,
       expiryDate,
+      type,
     }: {
       id: string;
       adjustment: number;
       reason?: string;
       expiryDate?: string;
-    }) => ingredientsService.adjustStock(id, adjustment, reason, expiryDate),
+      type?: 'intake' | 'consumption' | 'waste' | 'transfer' | 'correction';
+    }) =>
+      ingredientsService.adjustStock(id, adjustment, reason, expiryDate, type),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['ingredients'] }),
   });
 }
