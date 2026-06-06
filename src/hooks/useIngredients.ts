@@ -14,6 +14,19 @@ export function useLowStockIngredients(storeId?: string) {
   return useIngredients({ storeId, status: 'low', limit: 50 });
 }
 
+/**
+ * Lists ingredients whose best-before date is within `days` (default 14).
+ * Powers the workstation Inventory Alerts "Expiring Soon" card.
+ */
+export function useExpiringIngredients(storeId?: string, days = 14) {
+  return useQuery({
+    queryKey: ['ingredients', 'expiring', storeId, days],
+    queryFn: () => ingredientsService.listExpiring(storeId, days),
+    enabled: !!storeId,
+    staleTime: 60 * 1000,
+  });
+}
+
 export function useIngredient(id: string | undefined) {
   return useQuery({
     queryKey: ['ingredients', id],
@@ -25,8 +38,17 @@ export function useIngredient(id: string | undefined) {
 export function useAdjustStock() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, adjustment, reason }: { id: string; adjustment: number; reason?: string }) =>
-      ingredientsService.adjustStock(id, adjustment, reason),
+    mutationFn: ({
+      id,
+      adjustment,
+      reason,
+      expiryDate,
+    }: {
+      id: string;
+      adjustment: number;
+      reason?: string;
+      expiryDate?: string;
+    }) => ingredientsService.adjustStock(id, adjustment, reason, expiryDate),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['ingredients'] }),
   });
 }

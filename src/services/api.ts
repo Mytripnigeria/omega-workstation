@@ -41,6 +41,16 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   const res = await fetch(`${API_URL}${path}`, { ...options, headers });
 
+  // Session expired or revoked: clear the local session and bounce to the
+  // login screen so the staff member can re-authenticate. We only do this when
+  // we actually sent a token (anonymous 401s leave the caller in control).
+  if (res.status === 401 && token) {
+    workstationAuth.clear();
+    if (typeof window !== 'undefined' && window.location.pathname !== '/') {
+      window.location.href = '/';
+    }
+  }
+
   if (!res.ok) {
     const body = await res.json().catch(() => ({ message: 'Request failed' }));
     throw new Error(body.message ?? `HTTP ${res.status}`);

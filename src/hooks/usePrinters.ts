@@ -34,3 +34,17 @@ export function useDeletePrinter() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['printers'] }),
   });
 }
+
+export function useTestPrinter() {
+  return useMutation({
+    mutationFn: (id: string) => printersService.testPrint(id),
+  });
+}
+
+export function usePrintJobs(printerId: string | undefined, limit = 10) {
+  return useQuery({
+    queryKey: ['printers', 'jobs', printerId, limit],
+    queryFn: () => printersService.listJobs(printerId!, { limit }),
+    enabled: !!printerId,
+  });
+}

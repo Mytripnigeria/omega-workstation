@@ -24,11 +24,27 @@ export const ingredientsService = {
   findOne: (id: string): Promise<Ingredient> =>
     workstationApi.request<Ingredient>(`/ingredients/${id}`),
 
-  adjustStock: (id: string, adjustment: number, reason?: string): Promise<Ingredient> =>
+  adjustStock: (
+    id: string,
+    adjustment: number,
+    reason?: string,
+    expiryDate?: string,
+  ): Promise<Ingredient> =>
     workstationApi.request<Ingredient>(`/ingredients/${id}/adjust-stock`, {
       method: 'POST',
-      body: JSON.stringify({ adjustment, reason }),
+      body: JSON.stringify({ adjustment, reason, expiryDate }),
     }),
+
+  /**
+   * Lists ingredients whose best-before is within `days` (default 14).
+   * Returns an array (not paginated) — see /ingredients/expiring on the backend.
+   */
+  listExpiring: (storeId?: string, days = 14): Promise<Ingredient[]> => {
+    const qs = buildQueryString({ storeId, days });
+    return workstationApi.request<Ingredient[]>(
+      `/ingredients/expiring${qs ? `?${qs}` : ''}`,
+    );
+  },
 
   transfer: (
     fromId: string,

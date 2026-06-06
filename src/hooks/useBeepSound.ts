@@ -1,7 +1,11 @@
 import { useCallback, useRef, useEffect } from "react";
+import { getCachedStaffPreference } from "./useStaffPreferences";
 
 export const useBeepSound = () => {
   const playBeep = useCallback(() => {
+    // Respect the staff member's beep preference (settable from /settings).
+    if (!getCachedStaffPreference("beepEnabled")) return;
+
     const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
     const oscillator = audioContext.createOscillator();
     const gainNode = audioContext.createGain();

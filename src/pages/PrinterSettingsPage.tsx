@@ -10,6 +10,7 @@ import {
   Wifi,
   WifiOff,
   TestTube,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,6 +39,7 @@ import {
   useCreatePrinter,
   useUpdatePrinter,
   useDeletePrinter,
+  useTestPrinter,
 } from "@/hooks/usePrinters";
 import type { Printer as PrinterT, PrinterConnection, PrinterType } from "@/types/printer";
 
@@ -82,6 +84,7 @@ const PrinterSettingsPage = () => {
   const createPrinter = useCreatePrinter();
   const updatePrinter = useUpdatePrinter();
   const deletePrinter = useDeletePrinter();
+  const testPrinter = useTestPrinter();
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showActivityLog, setShowActivityLog] = useState(false);
@@ -151,6 +154,43 @@ const PrinterSettingsPage = () => {
     });
   };
 
+  const handleTestPrint = (printer: PrinterT) => {
+    testPrinter.mutate(printer.id, {
+      onSuccess: (job) => {
+        if (job.status === "sent") {
+          setToast({
+            open: true,
+            type: "success",
+            title: "Test print sent",
+            message: `${printer.name} accepted the test page.`,
+          });
+        } else if (job.status === "queued") {
+          setToast({
+            open: true,
+            type: "info",
+            title: "Test print queued",
+            message:
+              "Non-network printer — the job is queued for the local print agent to deliver.",
+          });
+        } else {
+          setToast({
+            open: true,
+            type: "error",
+            title: "Test print failed",
+            message: job.lastError ?? "Couldn't reach the printer.",
+          });
+        }
+      },
+      onError: (e: Error) =>
+        setToast({
+          open: true,
+          type: "error",
+          title: "Test print failed",
+          message: e.message,
+        }),
+    });
+  };
+
   const handleToggleActive = (printer: PrinterT) => {
     updatePrinter.mutate(
       { id: printer.id, data: { isActive: !printer.isActive } },
@@ -159,15 +199,6 @@ const PrinterSettingsPage = () => {
           setToast({ open: true, type: "error", title: "Update failed", message: e.message }),
       },
     );
-  };
-
-  const handleTestPrint = (printer: PrinterT) => {
-    setToast({
-      open: true,
-      type: "info",
-      title: "Test Print",
-      message: `Test print for ${printer.name} requires a print server (not implemented).`,
-    });
   };
 
   // A printer is considered "online" if it has a recent heartbeat (last 5 min).
@@ -312,14 +343,19 @@ const PrinterSettingsPage = () => {
                       size="sm"
                       className="flex-1 rounded-lg"
                       onClick={() => handleTestPrint(printer)}
+                      disabled={testPrinter.isPending}
                     >
-                      <TestTube className="w-4 h-4 mr-1" />
+                      {testPrinter.isPending && testPrinter.variables === printer.id ? (
+                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                      ) : (
+                        <TestTube className="w-4 h-4 mr-1" />
+                      )}
                       Test
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      className="rounded-lg"
+                      className="flex-1 rounded-lg"
                       onClick={() => handleToggleActive(printer)}
                       disabled={updatePrinter.isPending}
                     >

@@ -26,7 +26,9 @@ interface MenuItem {
   id: string;
   name: string;
   price: number;
-  category: string;
+  categoryId: string | null;
+  image?: string;
+  description?: string;
   variations?: VariationGroup[];
 }
 
@@ -109,7 +111,7 @@ const ItemVariationModal = ({ item, onClose, onAddToCart }: ItemVariationModalPr
                     </div>
                     {option.priceModifier !== 0 && (
                       <span className="text-muted-foreground text-sm">
-                        {option.priceModifier > 0 ? "+" : ""}£{option.priceModifier.toFixed(2)}
+                        {option.priceModifier > 0 ? "+" : ""}₦{option.priceModifier.toFixed(2)}
                       </span>
                     )}
                   </button>
@@ -122,7 +124,7 @@ const ItemVariationModal = ({ item, onClose, onAddToCart }: ItemVariationModalPr
         <DialogFooter className="flex-col sm:flex-row gap-2">
           <div className="flex-1 text-left">
             <span className="text-muted-foreground text-sm">Total: </span>
-            <span className="text-lg font-bold text-primary">£{calculateTotal().toFixed(2)}</span>
+            <span className="text-lg font-bold text-primary">₦{calculateTotal().toFixed(2)}</span>
           </div>
           <Button variant="outline" onClick={onClose}>
             Cancel

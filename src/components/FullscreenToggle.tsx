@@ -22,7 +22,7 @@ const FullscreenToggle = () => {
         await document.exitFullscreen();
       }
     } catch (err) {
-      console.error("Fullscreen error:", err);
+      if (import.meta.env.DEV) console.error("Fullscreen error:", err);
     }
   };
 

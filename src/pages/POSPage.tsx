@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Search,
   ShoppingCart,
@@ -62,6 +62,7 @@ import KeyboardShortcutsModal from "@/components/KeyboardShortcutsModal";
 import StaffFinancePanel from "@/components/StaffFinancePanel";
 import { useBeepSound } from "@/hooks/useBeepSound";
 import { useCategories } from "@/hooks/useCategories";
+import { useProducts } from "@/hooks/useProducts";
 import { useCreateOrder, useOrders, useRecordPayment } from "@/hooks/useOrders";
 import { workstationAuth } from "@/services/api";
 import {
@@ -87,7 +88,7 @@ interface MenuItem {
   id: string;
   name: string;
   price: number;
-  category: string;
+  categoryId: string | null;
   image?: string;
   description?: string;
   variations?: VariationGroup[];
@@ -118,68 +119,6 @@ interface IncomingOrder {
   billType?: "quick" | "process";
 }
 
-const menuItems: MenuItem[] = [
-  // Popular
-  { id: "1", name: "Jollof Rice", price: 3500, category: "popular", image: "🍚", description: "Smoky party-style jollof with perfectly seasoned tomato base", variations: [{ name: "Size", required: true, options: [{ id: "s1", name: "Regular", priceModifier: 0 }, { id: "s2", name: "Large", priceModifier: 1000 }] }] },
-  { id: "2", name: "Peppered Chicken", price: 2800, category: "popular", image: "🍗", description: "Crispy fried chicken in signature spicy pepper sauce" },
-  { id: "3", name: "Suya", price: 4500, category: "popular", image: "🥩", description: "Thinly sliced beef skewers with yaji spice and onions" },
-  { id: "4", name: "Egusi & Pounded Yam", price: 5500, category: "popular", image: "🍲", description: "Rich melon seed soup with smooth pounded yam" },
-  { id: "5", name: "Fried Rice", price: 3800, category: "popular", image: "🍛", description: "Nigerian fried rice with mixed vegetables and chicken", variations: [{ name: "Size", required: true, options: [{ id: "fr1", name: "Regular", priceModifier: 0 }, { id: "fr2", name: "Large", priceModifier: 1000 }] }] },
-  { id: "6", name: "Pepper Soup", price: 4000, category: "popular", image: "🥣", description: "Spicy aromatic soup with catfish or goat meat", variations: [{ name: "Protein", required: true, options: [{ id: "ps1", name: "Catfish", priceModifier: 0 }, { id: "ps2", name: "Goat Meat", priceModifier: 500 }] }] },
-  // New Release
-  { id: "7", name: "Ofada Rice & Ayamase", price: 4500, category: "new", image: "🍛", description: "Unpolished ofada rice with spicy green pepper sauce" },
-  { id: "8", name: "Afang Soup", price: 5200, category: "new", image: "🥬", description: "Cross River delicacy with afang leaves and water leaf" },
-  { id: "9", name: "Nkwobi", price: 4800, category: "new", image: "🥘", description: "Spicy cow foot in palm oil sauce - Igbo specialty" },
-  { id: "10", name: "Peppered Gizzard", price: 3200, category: "new", image: "🍖", description: "Tender gizzard in hot pepper sauce" },
-  { id: "11", name: "Boli & Fish", price: 2500, category: "new", image: "🍌", description: "Roasted plantain with grilled tilapia and pepper sauce" },
-  // Specialties
-  { id: "12", name: "Banga Soup & Starch", price: 5500, category: "specialties", image: "🍲", description: "Palm fruit soup with starch - Delta specialty" },
-  { id: "13", name: "Efo Riro", price: 4800, category: "specialties", image: "🥬", description: "Yoruba spinach stew with assorted meat and stockfish" },
-  { id: "14", name: "Oha Soup", price: 5000, category: "specialties", image: "🥗", description: "Traditional Igbo soup with oha leaves and cocoyam" },
-  { id: "15", name: "Edikang Ikong", price: 5800, category: "specialties", image: "🥬", description: "Premium vegetable soup with pumpkin and water leaves" },
-  { id: "16", name: "Asun", price: 5000, category: "specialties", image: "🥘", description: "Spicy grilled goat meat - Lagos party favorite" },
-  { id: "17", name: "Isi Ewu", price: 6500, category: "specialties", image: "🐐", description: "Spiced goat head delicacy with utazi leaves" },
-  { id: "18", name: "Ogbono Soup", price: 4500, category: "specialties", image: "🍲", description: "Draw soup made with wild mango seeds", variations: [{ name: "Swallow", required: true, options: [{ id: "og1", name: "Pounded Yam", priceModifier: 0 }, { id: "og2", name: "Eba", priceModifier: 0 }, { id: "og3", name: "Semo", priceModifier: 0 }] }] },
-  // Starters
-  { id: "19", name: "Small Chops", price: 3500, category: "starters", image: "🍢", description: "Samosa, spring rolls, puff puff, and chicken strips" },
-  { id: "20", name: "Pepper Snail", price: 4500, category: "starters", image: "🐚", description: "Tender snails in spicy pepper sauce" },
-  { id: "21", name: "Gizdodo", price: 2800, category: "starters", image: "🍗", description: "Fried gizzard with diced fried plantain" },
-  { id: "22", name: "Chicken Wings", price: 3200, category: "starters", image: "🍗", description: "Crispy wings with suya or BBQ sauce", variations: [{ name: "Sauce", required: false, options: [{ id: "cw1", name: "Suya", priceModifier: 0 }, { id: "cw2", name: "BBQ", priceModifier: 0 }, { id: "cw3", name: "Pepper", priceModifier: 200 }] }] },
-  { id: "23", name: "Yam Fries", price: 1500, category: "starters", image: "🍟", description: "Crispy yam strips with pepper dipping sauce" },
-  { id: "24", name: "Kilishi", price: 2500, category: "starters", image: "🥩", description: "Nigerian beef jerky with groundnut spice" },
-  // Mains
-  { id: "25", name: "Pounded Yam & Soup", price: 4500, category: "mains", image: "🍚", description: "Fresh pounded yam with choice of soup", variations: [{ name: "Soup", required: true, options: [{ id: "py1", name: "Egusi", priceModifier: 0 }, { id: "py2", name: "Ogbono", priceModifier: 0 }, { id: "py3", name: "Efo Riro", priceModifier: 200 }] }] },
-  { id: "26", name: "Amala & Ewedu", price: 4000, category: "mains", image: "🍛", description: "Yam flour swallow with ewedu and gbegiri" },
-  { id: "27", name: "Semo & Okra Soup", price: 3800, category: "mains", image: "🍚", description: "Semolina swallow with fresh okra and seafood" },
-  { id: "28", name: "Jollof Spaghetti", price: 2800, category: "mains", image: "🍝", description: "Nigerian-style pasta in tomato stew" },
-  { id: "29", name: "Beans & Plantain", price: 2500, category: "mains", image: "🫘", description: "Honey beans porridge with fried plantain" },
-  { id: "30", name: "Tuwo Shinkafa", price: 3500, category: "mains", image: "🍚", description: "Rice swallow with miyan kuka or taushe" },
-  { id: "31", name: "White Rice & Stew", price: 2800, category: "mains", image: "🍛", description: "Steamed rice with rich tomato stew", variations: [{ name: "Protein", required: true, options: [{ id: "wr1", name: "Chicken", priceModifier: 0 }, { id: "wr2", name: "Beef", priceModifier: 300 }, { id: "wr3", name: "Fish", priceModifier: 500 }] }] },
-  // Sides
-  { id: "32", name: "Dodo (Fried Plantain)", price: 800, category: "sides", image: "🍌", description: "Sweet ripe plantains fried golden" },
-  { id: "33", name: "Moi Moi", price: 600, category: "sides", image: "🫘", description: "Steamed bean pudding with eggs and fish" },
-  { id: "34", name: "Coleslaw", price: 500, category: "sides", image: "🥗", description: "Fresh creamy coleslaw salad" },
-  { id: "35", name: "Extra Meat", price: 1500, category: "sides", image: "🥩", description: "Additional assorted meat or ponmo", variations: [{ name: "Type", required: true, options: [{ id: "em1", name: "Beef", priceModifier: 0 }, { id: "em2", name: "Goat", priceModifier: 300 }, { id: "em3", name: "Ponmo", priceModifier: -200 }] }] },
-  { id: "36", name: "Steamed Vegetables", price: 800, category: "sides", image: "🥦", description: "Mixed vegetables lightly seasoned" },
-  { id: "37", name: "Akara", price: 500, category: "sides", image: "🧆", description: "Fried bean cakes - 5 pieces" },
-  // Drinks
-  { id: "38", name: "Chapman", price: 1500, category: "drinks", image: "🍹", description: "Nigerian cocktail with Fanta, Sprite, and grenadine", variations: [{ name: "Size", required: false, options: [{ id: "d1", name: "Regular", priceModifier: 0 }, { id: "d2", name: "Large Jug", priceModifier: 2000 }] }] },
-  { id: "39", name: "Zobo", price: 800, category: "drinks", image: "🧃", description: "Refreshing hibiscus drink with ginger and pineapple" },
-  { id: "40", name: "Palm Wine", price: 1200, category: "drinks", image: "🥛", description: "Fresh natural palm wine - chilled" },
-  { id: "41", name: "Kunu", price: 700, category: "drinks", image: "🥤", description: "Traditional millet drink with spices" },
-  { id: "42", name: "Fresh Juice", price: 1000, category: "drinks", image: "🍊", description: "Orange, pineapple or watermelon", variations: [{ name: "Flavor", required: true, options: [{ id: "fj1", name: "Orange", priceModifier: 0 }, { id: "fj2", name: "Pineapple", priceModifier: 0 }, { id: "fj3", name: "Watermelon", priceModifier: 200 }] }] },
-  { id: "43", name: "Bottled Water", price: 300, category: "drinks", image: "💧", description: "Eva or Nestle 75cl" },
-  { id: "44", name: "Soft Drinks", price: 500, category: "drinks", image: "🥤", description: "Coke, Fanta, Sprite, or Pepsi" },
-  { id: "45", name: "Malta Guinness", price: 600, category: "drinks", image: "🍺", description: "Classic non-alcoholic malt drink" },
-  { id: "46", name: "Hollandia Yoghurt", price: 700, category: "drinks", image: "🥛", description: "Creamy drinking yoghurt" },
-  // Desserts
-  { id: "47", name: "Chin Chin", price: 1000, category: "desserts", image: "🍪", description: "Crunchy fried dough snacks" },
-  { id: "48", name: "Puff Puff", price: 800, category: "desserts", image: "🧁", description: "Soft fried dough balls dusted with sugar" },
-  { id: "49", name: "Coconut Candy", price: 600, category: "desserts", image: "🥥", description: "Sweet coconut treats" },
-  { id: "50", name: "Fruit Salad", price: 1200, category: "desserts", image: "🍓", description: "Fresh pawpaw, watermelon, pineapple with cream" },
-  { id: "51", name: "Fan Ice", price: 300, category: "desserts", image: "🍨", description: "Classic Fan Milk ice cream" },
-  { id: "52", name: "Agege Bread & Butter", price: 500, category: "desserts", image: "🍞", description: "Soft sweet bread with Blue Band butter" },
-];
 
 const POSPage = () => {
   const navigate = useNavigate();
@@ -198,9 +137,49 @@ const POSPage = () => {
     }
   }, [menuCategories, selectedCategory]);
 
-  const selectedCategoryName = menuCategories
-    .find((c) => c.id === selectedCategory)
-    ?.name.toLowerCase();
+  // Load the live product menu for this staff's store.
+  const {
+    data: products = [],
+    isLoading: productsLoading,
+    isError: productsError,
+    refetch: refetchProducts,
+  } = useProducts();
+
+  // Map backend Products → POS MenuItem. Backend variations are independent
+  // variants each with their own sellingPrice; the POS expects a single
+  // VariationGroup whose options carry a `priceModifier` relative to the
+  // base, so we compute `priceModifier = variant.sellingPrice − basePrice`.
+  const menuItems: MenuItem[] = useMemo(
+    () =>
+      products.map((p) => {
+        const basePrice = Number(p.sellingPrice);
+        const variations =
+          p.variations && p.variations.length > 0
+            ? [
+                {
+                  name: "Variant",
+                  required: true,
+                  options: p.variations.map((v) => ({
+                    id: v.id,
+                    name: v.name,
+                    priceModifier: Number(v.sellingPrice) - basePrice,
+                  })),
+                },
+              ]
+            : undefined;
+        return {
+          id: p.id,
+          name: p.name,
+          price: basePrice,
+          categoryId: p.categoryId,
+          image: p.imageUrl ?? undefined,
+          description: p.description ?? undefined,
+          variations,
+        };
+      }),
+    [products],
+  );
+
   const [searchQuery, setSearchQuery] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
@@ -209,7 +188,9 @@ const POSPage = () => {
   const { data: ordersPage } = useOrders({ status: "pending,preparing,ready", limit: 20 }, 5000);
   const incomingOrders: IncomingOrder[] = (ordersPage?.data ?? []).map((o) => ({
     id: `#${o.orderNumber}`,
-    source: o.channel === "website" ? "website" : o.channel === "phone" ? "phone" : "pos",
+    // The POS receipt UI only distinguishes pos/website/ubereats/deliveroo/selfservice;
+    // phone-channel orders surface in the POS workflow indistinguishably from in-store.
+    source: o.channel === "website" ? "website" : "pos",
     customerName: o.customerName ?? "Walk-in",
     items: o.items.map((i) => ({ name: i.name, quantity: i.quantity, price: Number(i.unitPrice) })),
     total: Number(o.total),
@@ -273,7 +254,7 @@ const POSPage = () => {
     if (searchQuery.trim()) {
       return matchesSearch;
     }
-    return selectedCategoryName ? item.category === selectedCategoryName : false;
+    return selectedCategory ? item.categoryId === selectedCategory : false;
   });
 
   const handleItemClick = (item: MenuItem) => {
@@ -590,8 +571,8 @@ const POSPage = () => {
       // Number keys 1-8 for category selection
       if (!e.ctrlKey && !e.metaKey && !e.altKey && /^[1-8]$/.test(e.key)) {
         const categoryIndex = parseInt(e.key) - 1;
-        if (categories[categoryIndex]) {
-          setSelectedCategory(categories[categoryIndex].id);
+        if (menuCategories[categoryIndex]) {
+          setSelectedCategory(menuCategories[categoryIndex].id);
         }
         return;
       }
@@ -800,9 +781,27 @@ const POSPage = () => {
               )}
 
               {/* Menu Grid */}
+              {productsError && (
+                <div className="text-center py-8 mb-4 text-muted-foreground border border-dashed border-border rounded-xl">
+                  <p className="mb-3 text-sm">Couldn't load products.</p>
+                  <Button variant="outline" size="sm" onClick={() => refetchProducts()}>
+                    Try again
+                  </Button>
+                </div>
+              )}
+              {!productsError && !productsLoading && products.length === 0 && (
+                <div className="text-center py-8 mb-4 text-muted-foreground border border-dashed border-border rounded-xl">
+                  <p className="text-sm">No products yet — add some from the merchant hub.</p>
+                </div>
+              )}
+              {!productsError && !productsLoading && products.length > 0 && filteredItems.length === 0 && (
+                <p className="text-center py-6 text-sm text-muted-foreground">
+                  {searchQuery.trim() ? "No products match your search." : "No products in this category yet."}
+                </p>
+              )}
               <div className={`grid gap-3 ${
-                posMode === "selfservice" 
-                  ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" 
+                posMode === "selfservice"
+                  ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4"
                   : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
               }`}>
                 {filteredItems.map((item) => (
@@ -811,10 +810,14 @@ const POSPage = () => {
                     onClick={() => handleItemClick(item)}
                     className="bg-card rounded-2xl border border-border p-4 text-center hover:border-primary/30 hover:shadow-lg transition-all group flex flex-col items-center"
                   >
-                    <div className={`flex items-center justify-center rounded-xl bg-muted mb-3 ${
-                      posMode === "selfservice" ? "w-16 h-16 text-3xl" : "w-14 h-14 text-2xl"
+                    <div className={`flex items-center justify-center rounded-xl bg-muted mb-3 overflow-hidden ${
+                      posMode === "selfservice" ? "w-16 h-16" : "w-14 h-14"
                     }`}>
-                      {item.image || "🍽️"}
+                      {item.image ? (
+                        <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <Utensils className={posMode === "selfservice" ? "w-7 h-7 text-muted-foreground" : "w-6 h-6 text-muted-foreground"} />
+                      )}
                     </div>
                     <h3 className={`font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-2 ${
                       posMode === "selfservice" ? "text-sm" : "text-xs"
@@ -981,8 +984,15 @@ const POSPage = () => {
           ) : (
             cart.map((item) => (
               <div key={item.id} className="flex items-center gap-3 bg-muted/50 rounded-xl p-3">
-                <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center text-xl flex-shrink-0">
-                  {menuItems.find(m => m.id === item.menuItemId)?.image || "🍽️"}
+                <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center text-xl flex-shrink-0 overflow-hidden">
+                  {(() => {
+                    const img = menuItems.find((m) => m.id === item.menuItemId)?.image;
+                    return img ? (
+                      <img src={img} alt={item.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <Utensils className="w-5 h-5 text-muted-foreground" />
+                    );
+                  })()}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-foreground text-sm">{item.name}</p>

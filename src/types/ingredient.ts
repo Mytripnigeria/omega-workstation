@@ -10,6 +10,8 @@ export interface Ingredient {
   sku: string | null;
   storeId: string;
   lastRestocked: string | null;
+  /** Best-before / use-by date for the current batch (YYYY-MM-DD), or null. */
+  expiryDate: string | null;
   createdAt: string;
   updatedAt: string;
 }
