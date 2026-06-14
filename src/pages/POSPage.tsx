@@ -18,6 +18,7 @@ import {
   RotateCcw,
   Printer,
   Bell,
+  RefreshCw,
   User,
   Zap,
   Wallet,
@@ -63,7 +64,9 @@ import StaffFinancePanel from "@/components/StaffFinancePanel";
 import { useBeepSound } from "@/hooks/useBeepSound";
 import { useCategories } from "@/hooks/useCategories";
 import { useProducts } from "@/hooks/useProducts";
-import { useCreateOrder, useOrders, useRecordPayment } from "@/hooks/useOrders";
+import { useCancelOrder, useCreateOrder, useOrders, useRecordPayment, useUpdateOrderStatus } from "@/hooks/useOrders";
+import { useMyActiveCashSession, useOpenCashSession, useCloseCashSession } from "@/hooks/useCashSession";
+import { Label } from "@/components/ui/label";
 import { workstationAuth } from "@/services/api";
 import {
   getPaystackPublicKey,
@@ -84,6 +87,13 @@ interface VariationGroup {
   options: Variation[];
 }
 
+interface AddonGroup {
+  id: string;
+  name: string;
+  maxSelection: number | null;
+  options: Variation[];
+}
+
 interface MenuItem {
   id: string;
   name: string;
@@ -92,6 +102,7 @@ interface MenuItem {
   image?: string;
   description?: string;
   variations?: VariationGroup[];
+  addonGroups?: AddonGroup[];
 }
 
 interface CartItem {
@@ -104,8 +115,20 @@ interface CartItem {
   variationText?: string;
 }
 
+interface HeldOrder {
+  id: string;
+  label: string;
+  total: number;
+  cart: CartItem[];
+  orderType: "dine-in" | "takeaway" | "delivery";
+  customerName: string;
+  createdAt: string;
+}
+
 interface IncomingOrder {
   id: string;
+  /** Real backend order UUID (the display `id` is the #orderNumber label). */
+  backendId?: string;
   source: "pos" | "website" | "ubereats" | "deliveroo" | "selfservice";
   customerName: string;
   items: { name: string; quantity: number; price: number }[];
@@ -129,13 +152,10 @@ const POSPage = () => {
     isError: categoriesError,
     refetch: refetchCategories,
   } = useCategories("menu");
-  const [selectedCategory, setSelectedCategory] = useState<string>("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
 
-  useEffect(() => {
-    if (!selectedCategory && menuCategories.length > 0) {
-      setSelectedCategory(menuCategories[0].id);
-    }
-  }, [menuCategories, selectedCategory]);
+  // Defaults to the "all" view so every loaded item is browsable without
+  // searching; staff can then narrow by a specific category pill.
 
   // Load the live product menu for this staff's store.
   const {
@@ -145,13 +165,43 @@ const POSPage = () => {
     refetch: refetchProducts,
   } = useProducts();
 
+  // Offline availability: cache the loaded menu in localStorage and fall back
+  // to it when the live fetch is empty/offline, so counter staff can keep
+  // selecting items. The "Sync" button refreshes both menu + categories.
+  const menuCacheKey = `pos_menu_cache_${workstationAuth.getStaff()?.storeId ?? "default"}`;
+  useEffect(() => {
+    if (products.length > 0) {
+      try {
+        localStorage.setItem(menuCacheKey, JSON.stringify(products));
+      } catch {
+        /* ignore quota/private-mode */
+      }
+    }
+  }, [products, menuCacheKey]);
+
+  const effectiveProducts = useMemo(() => {
+    if (products.length > 0) return products;
+    try {
+      const raw = localStorage.getItem(menuCacheKey);
+      return raw ? (JSON.parse(raw) as typeof products) : products;
+    } catch {
+      return products;
+    }
+  }, [products, menuCacheKey]);
+
+  const handleSyncMenu = () => {
+    refetchProducts();
+    refetchCategories();
+    setToast({ open: true, type: "info", title: "Syncing menu…" });
+  };
+
   // Map backend Products → POS MenuItem. Backend variations are independent
   // variants each with their own sellingPrice; the POS expects a single
   // VariationGroup whose options carry a `priceModifier` relative to the
   // base, so we compute `priceModifier = variant.sellingPrice − basePrice`.
   const menuItems: MenuItem[] = useMemo(
     () =>
-      products.map((p) => {
+      effectiveProducts.map((p) => {
         const basePrice = Number(p.sellingPrice);
         const variations =
           p.variations && p.variations.length > 0
@@ -167,6 +217,21 @@ const POSPage = () => {
                 },
               ]
             : undefined;
+        const addonGroups = (p.addonGroups ?? [])
+          .filter((g) => (g.addons ?? []).length > 0)
+          .map((g) => ({
+            id: g.id,
+            name: g.name,
+            maxSelection: g.maxSelection ?? null,
+            options: (g.addons ?? [])
+              .filter((a) => a.isAvailable !== false)
+              .map((a) => ({
+                id: a.id,
+                name: a.name,
+                priceModifier: Number(a.price),
+              })),
+          }))
+          .filter((g) => g.options.length > 0);
         return {
           id: p.id,
           name: p.name,
@@ -175,19 +240,41 @@ const POSPage = () => {
           image: p.imageUrl ?? undefined,
           description: p.description ?? undefined,
           variations,
+          addonGroups: addonGroups.length > 0 ? addonGroups : undefined,
         };
       }),
-    [products],
+    [effectiveProducts],
   );
 
   const [searchQuery, setSearchQuery] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
+  // Held-order drafts persist across reloads so a counter can park a cart and
+  // restore it later (repopulates the exact cart, variations + add-ons).
+  const heldOrdersKey = `pos_held_orders_${workstationAuth.getStaff()?.storeId ?? "default"}`;
+  const [heldOrders, setHeldOrders] = useState<HeldOrder[]>(() => {
+    try {
+      const raw = localStorage.getItem(`pos_held_orders_${workstationAuth.getStaff()?.storeId ?? "default"}`);
+      return raw ? (JSON.parse(raw) as HeldOrder[]) : [];
+    } catch {
+      return [];
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(heldOrdersKey, JSON.stringify(heldOrders));
+    } catch {
+      /* ignore */
+    }
+  }, [heldOrders, heldOrdersKey]);
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [activeTab, setActiveTab] = useState("menu");
   // Real incoming orders for this store, polled every 5s.
-  const { data: ordersPage } = useOrders({ status: "pending,preparing,ready", limit: 20 }, 5000);
+  // Poll every channel's open orders, including freshly INITIATED ones that
+  // await acceptance in the counter POS (all channels funnel through here).
+  const { data: ordersPage } = useOrders({ status: "initiated,pending,preparing,ready", limit: 20 }, 5000);
   const incomingOrders: IncomingOrder[] = (ordersPage?.data ?? []).map((o) => ({
     id: `#${o.orderNumber}`,
+    backendId: o.id,
     // The POS receipt UI only distinguishes pos/website/ubereats/deliveroo/selfservice;
     // phone-channel orders surface in the POS workflow indistinguishably from in-store.
     source: o.channel === "website" ? "website" : "pos",
@@ -197,20 +284,86 @@ const POSPage = () => {
     time: new Date(o.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     startTime: new Date(o.createdAt),
     estimatedMinutes: 15,
-    status: o.status === "ready" ? "ready" : o.status === "preparing" ? "preparing" : "pending",
+    // Map backend lifecycle → POS panel states. INITIATED orders are brand-new
+    // and show Accept/Reject; PENDING (accepted) shows Quick Bill / Kitchen.
+    status:
+      o.status === "ready"
+        ? "ready"
+        : o.status === "preparing"
+          ? "preparing"
+          : o.status === "initiated"
+            ? "pending"
+            : "confirmed",
     tableNumber: o.tableNumber ?? undefined,
     orderType: o.isDelivery ? "delivery" : o.tableNumber ? "dine-in" : "takeaway",
     billType: "process",
   }));
-  // Stub setter to keep existing local UI flows compiling for now (e.g. holdOrder).
-  // The real data is sourced from the API hook above; transient UI-only states (holds)
-  // would need a dedicated module to persist across sessions — out of scope for Phase 3.
+  // Local-only setter retained for transient UI flows (hold drafts). API-sourced
+  // orders are mutated through the order hooks below.
   const setIncomingOrders = (_updater: unknown) => {
     void _updater;
   };
   const createOrderMutation = useCreateOrder();
   const recordPaymentMutation = useRecordPayment();
+  const updateOrderStatusMutation = useUpdateOrderStatus();
+  const cancelOrderMutation = useCancelOrder();
   const [autoAccept, setAutoAccept] = useState(false);
+
+  // Register (cash session) gating — a counter must have an open register
+  // before taking bookings.
+  const { data: activeRegister, isLoading: registerLoading } = useMyActiveCashSession();
+  const openRegisterMutation = useOpenCashSession();
+  const closeRegisterMutation = useCloseCashSession();
+  const [registerForm, setRegisterForm] = useState({ counterName: "", cashAtHand: "" });
+
+  const handleOpenRegister = () => {
+    const cash = Number(registerForm.cashAtHand);
+    if (!registerForm.counterName.trim()) {
+      setToast({ open: true, type: "error", title: "Counter name is required" });
+      return;
+    }
+    if (!Number.isFinite(cash) || cash < 0) {
+      setToast({ open: true, type: "error", title: "Enter a valid cash amount" });
+      return;
+    }
+    openRegisterMutation.mutate(
+      { counterName: registerForm.counterName.trim(), openingFloat: cash },
+      {
+        onSuccess: () => {
+          setToast({ open: true, type: "success", title: "Register opened" });
+          setRegisterForm({ counterName: "", cashAtHand: "" });
+        },
+        onError: (e: Error) =>
+          setToast({ open: true, type: "error", title: e.message ?? "Failed to open register" }),
+      },
+    );
+  };
+
+  const handleCloseRegister = () => {
+    if (!activeRegister) return;
+    setConfirmDialog({
+      open: true,
+      title: "Close Register",
+      description: "Close this register and end the session?",
+      action: () =>
+        closeRegisterMutation.mutate(
+          {
+            id: activeRegister.id,
+            input: {
+              actualCash: Number(activeRegister.expectedCash) || 0,
+              actualCard: Number(activeRegister.expectedCard) || 0,
+              actualMobile: Number(activeRegister.expectedMobile) || 0,
+            },
+          },
+          {
+            onSuccess: () =>
+              setToast({ open: true, type: "success", title: "Register closed" }),
+            onError: (e: Error) =>
+              setToast({ open: true, type: "error", title: e.message ?? "Failed to close register" }),
+          },
+        ),
+    });
+  };
   const [discount, setDiscount] = useState(0);
   const [showDiscountModal, setShowDiscountModal] = useState(false);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
@@ -250,15 +403,20 @@ const POSPage = () => {
   const filteredItems = menuItems.filter((item) => {
     const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           item.description?.toLowerCase().includes(searchQuery.toLowerCase());
-    // When searching, show items across all categories; otherwise filter by selected category
+    // When searching, show items across all categories; otherwise show all
+    // items ("all" view) or filter by the selected category.
     if (searchQuery.trim()) {
       return matchesSearch;
     }
-    return selectedCategory ? item.categoryId === selectedCategory : false;
+    if (!selectedCategory || selectedCategory === "all") return true;
+    return item.categoryId === selectedCategory;
   });
 
   const handleItemClick = (item: MenuItem) => {
-    if (item.variations && item.variations.length > 0) {
+    if (
+      (item.variations && item.variations.length > 0) ||
+      (item.addonGroups && item.addonGroups.length > 0)
+    ) {
       setSelectedItem(item);
     } else {
       addToCart(item, {});
@@ -482,23 +640,20 @@ const POSPage = () => {
 
   const holdOrder = () => {
     if (cart.length === 0) return;
-    const holdOrder: IncomingOrder = {
-      id: `#HOLD${Date.now().toString().slice(-4)}`,
-      source: "pos",
-      customerName: customerName || "Hold Order",
-      items: cart.map((c) => ({ name: c.name, quantity: c.quantity, price: c.price })),
-      total: total,
-      time: "Just now",
-      startTime: new Date(),
-      estimatedMinutes: 0,
-      status: "hold",
+    const held: HeldOrder = {
+      id: `HOLD${Date.now().toString().slice(-5)}`,
+      label: customerName || "Hold Order",
+      total,
+      cart,
       orderType,
+      customerName,
+      createdAt: new Date().toISOString(),
     };
-    setIncomingOrders((prev) => [holdOrder, ...prev]);
+    setHeldOrders((prev) => [held, ...prev]);
     setCart([]);
     setDiscount(0);
     setCustomerName("");
-    setToast({ open: true, type: "info", title: "Order Held", message: "Order saved. Click to restore." });
+    setToast({ open: true, type: "info", title: "Order Held", message: "Order saved. Restore it from On Hold." });
   };
 
   // Keyboard shortcuts
@@ -582,25 +737,23 @@ const POSPage = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [cart, handleQuickBill, handleProcessBill, holdOrder]);
 
-  const recallOrder = (order: IncomingOrder) => {
-    setConfirmDialog({
-      open: true, title: "Recall Order", description: "This will move the order back to your cart. Continue?",
-      action: () => {
-        order.items.forEach((item) => {
-          for (let i = 0; i < item.quantity; i++) {
-            const menuItem = menuItems.find((m) => item.name.includes(m.name));
-            if (menuItem) addToCart(menuItem, {});
-          }
-        });
-        if (order.customerName && order.customerName !== "Walk-in" && order.customerName !== "Hold Order") {
-          setCustomerName(order.customerName);
-        }
-        if (order.orderType) {
-          setOrderType(order.orderType);
-        }
-        setIncomingOrders((prev) => prev.filter((o) => o.id !== order.id));
-      }
-    });
+  const recallOrder = (held: HeldOrder) => {
+    const restore = () => {
+      setCart(held.cart);
+      setOrderType(held.orderType);
+      setCustomerName(held.customerName);
+      setHeldOrders((prev) => prev.filter((h) => h.id !== held.id));
+    };
+    if (cart.length > 0) {
+      setConfirmDialog({
+        open: true,
+        title: "Restore held order",
+        description: "This replaces the current cart with the held order. Continue?",
+        action: restore,
+      });
+    } else {
+      restore();
+    }
   };
 
   const printReceipt = (order: IncomingOrder) => {
@@ -636,7 +789,6 @@ const POSPage = () => {
     }
   };
 
-  const holdOrders = incomingOrders.filter((o) => o.status === "hold");
   const activeOrders = incomingOrders.filter((o) => !["hold"].includes(o.status));
 
   return (
@@ -718,6 +870,28 @@ const POSPage = () => {
               </Tabs>
 
               <div className="flex items-center gap-3">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="rounded-lg"
+                  onClick={handleSyncMenu}
+                  disabled={productsLoading}
+                  title="Sync menu for offline use"
+                >
+                  <RefreshCw className={`w-4 h-4 ${productsLoading ? "animate-spin" : ""}`} />
+                  <span className="hidden sm:inline ml-1">Sync</span>
+                </Button>
+                {activeRegister && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="rounded-lg"
+                    onClick={handleCloseRegister}
+                    disabled={closeRegisterMutation.isPending}
+                  >
+                    Close Register
+                  </Button>
+                )}
                 <div className="flex items-center gap-2 text-sm">
                   <Bell className="w-4 h-4 text-muted-foreground" />
                   <span className="text-muted-foreground hidden sm:inline">Auto Accept</span>
@@ -755,28 +929,45 @@ const POSPage = () => {
                     />
                   ))
                 ) : (
-                  menuCategories.map((cat) => (
+                  <>
                     <button
-                      key={cat.id}
-                      onClick={() => setSelectedCategory(cat.id)}
+                      key="__all__"
+                      onClick={() => setSelectedCategory("all")}
                       className={`flex items-center gap-2 px-4 py-2.5 rounded-full whitespace-nowrap transition-all font-medium ${
-                        selectedCategory === cat.id
+                        selectedCategory === "all"
                           ? "bg-primary text-primary-foreground"
                           : "bg-card border border-border hover:border-primary/30"
                       } ${posMode === "selfservice" ? "text-base py-3 px-5" : "text-sm"}`}
                     >
-                      {cat.emoji && <span>{cat.emoji}</span>}
-                      <span>{cat.name}</span>
+                      <span>All</span>
                     </button>
-                  ))
+                    {menuCategories.map((cat) => (
+                      <button
+                        key={cat.id}
+                        onClick={() => setSelectedCategory(cat.id)}
+                        className={`flex items-center gap-2 px-4 py-2.5 rounded-full whitespace-nowrap transition-all font-medium ${
+                          selectedCategory === cat.id
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-card border border-border hover:border-primary/30"
+                        } ${posMode === "selfservice" ? "text-base py-3 px-5" : "text-sm"}`}
+                      >
+                        {cat.emoji && <span>{cat.emoji}</span>}
+                        <span>{cat.name}</span>
+                      </button>
+                    ))}
+                  </>
                 )}
               </div>
 
               {/* Category Title */}
               {selectedCategory && (
                 <h2 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
-                  {menuCategories.find((c) => c.id === selectedCategory)?.name}
-                  <span>{menuCategories.find((c) => c.id === selectedCategory)?.emoji}</span>
+                  {selectedCategory === "all"
+                    ? "All Items"
+                    : menuCategories.find((c) => c.id === selectedCategory)?.name}
+                  {selectedCategory !== "all" && (
+                    <span>{menuCategories.find((c) => c.id === selectedCategory)?.emoji}</span>
+                  )}
                 </h2>
               )}
 
@@ -843,20 +1034,22 @@ const POSPage = () => {
           {posMode === "counter" && activeTab === "orders" && (
             <div className="space-y-4">
               {/* Hold Orders */}
-              {holdOrders.length > 0 && (
+              {heldOrders.length > 0 && (
                 <div>
                   <h3 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
                     <Pause className="w-4 h-4" />
-                    On Hold ({holdOrders.length})
+                    On Hold ({heldOrders.length})
                   </h3>
                   <div className="space-y-2">
-                    {holdOrders.map((order) => (
-                      <div key={order.id} className="bg-muted/50 border border-border rounded-xl p-4 flex items-center justify-between">
+                    {heldOrders.map((held) => (
+                      <div key={held.id} className="bg-muted/50 border border-border rounded-xl p-4 flex items-center justify-between">
                         <div>
-                          <span className="font-semibold text-foreground">{order.id}</span>
-                          <p className="text-sm text-muted-foreground">₦{order.total.toLocaleString()}</p>
+                          <span className="font-semibold text-foreground">{held.label}</span>
+                          <p className="text-sm text-muted-foreground">
+                            {held.cart.reduce((n, c) => n + c.quantity, 0)} item(s) · ₦{held.total.toLocaleString()}
+                          </p>
                         </div>
-                        <Button size="sm" variant="outline" onClick={() => recallOrder(order)} className="rounded-xl">
+                        <Button size="sm" variant="outline" onClick={() => recallOrder(held)} className="rounded-xl">
                           <RotateCcw className="w-4 h-4 mr-2" />
                           Restore
                         </Button>
@@ -898,16 +1091,26 @@ const POSPage = () => {
                         <Button size="sm" variant="outline" onClick={() => printReceipt(order)} className="rounded-lg">
                           <Printer className="w-4 h-4" />
                         </Button>
-                        {order.status === "pending" && (
-                          <Button size="sm" className="rounded-lg" onClick={() => setIncomingOrders((prev) => prev.map((o) => o.id === order.id ? { ...o, status: "confirmed" } : o))}>
-                            Confirm
-                          </Button>
+                        {order.status === "pending" && order.backendId && (
+                          <>
+                            <Button size="sm" variant="outline" className="rounded-lg" onClick={() => cancelOrderMutation.mutate({ id: order.backendId!, reason: "Rejected" })}>
+                              Reject
+                            </Button>
+                            <Button size="sm" className="rounded-lg" onClick={() => updateOrderStatusMutation.mutate({ id: order.backendId!, status: "pending" })}>
+                              Accept
+                            </Button>
+                          </>
                         )}
-                        {order.status === "confirmed" && (
-                          <Button size="sm" className="rounded-lg" onClick={() => setIncomingOrders((prev) => prev.map((o) => o.id === order.id ? { ...o, status: "preparing" } : o))}>
-                            <ChefHat className="w-4 h-4 mr-1" />
-                            Kitchen
-                          </Button>
+                        {order.status === "confirmed" && order.backendId && (
+                          <>
+                            <Button size="sm" variant="outline" className="rounded-lg" onClick={() => updateOrderStatusMutation.mutate({ id: order.backendId!, status: "ready" })}>
+                              Quick Bill
+                            </Button>
+                            <Button size="sm" className="rounded-lg" onClick={() => updateOrderStatusMutation.mutate({ id: order.backendId!, status: "preparing" })}>
+                              <ChefHat className="w-4 h-4 mr-1" />
+                              Kitchen
+                            </Button>
+                          </>
                         )}
                       </div>
                     </div>
@@ -1163,6 +1366,38 @@ const POSPage = () => {
 
       {/* Modals */}
       <ItemVariationModal item={selectedItem} onClose={() => setSelectedItem(null)} onAddToCart={addToCart} />
+      {/* Open Register gate — shown for counter mode when no register is open */}
+      <Dialog open={posMode === "counter" && !registerLoading && !activeRegister}>
+        <DialogContent className="sm:max-w-sm" onPointerDownOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle>Open Register</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Counter Name</Label>
+              <Input
+                placeholder="e.g., Counter 1"
+                value={registerForm.counterName}
+                onChange={(e) => setRegisterForm((p) => ({ ...p, counterName: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Cash at Hand</Label>
+              <Input
+                type="number"
+                min={0}
+                placeholder="0"
+                value={registerForm.cashAtHand}
+                onChange={(e) => setRegisterForm((p) => ({ ...p, cashAtHand: e.target.value }))}
+              />
+            </div>
+            <Button className="w-full rounded-xl" onClick={handleOpenRegister} disabled={openRegisterMutation.isPending}>
+              Open Register
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <ConfirmDialog open={confirmDialog.open} onOpenChange={(open) => setConfirmDialog({ ...confirmDialog, open })} title={confirmDialog.title} description={confirmDialog.description} onConfirm={() => { confirmDialog.action(); setConfirmDialog({ ...confirmDialog, open: false }); }} />
       <ToastNotification open={toast.open} onClose={() => setToast({ ...toast, open: false })} type={toast.type} title={toast.title} message={toast.message} />
       <DiscountModal open={showDiscountModal} onClose={() => setShowDiscountModal(false)} subtotal={subtotal} onApplyDiscount={setDiscount} />

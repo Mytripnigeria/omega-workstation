@@ -26,11 +26,14 @@ import ToastNotification from "@/components/ToastNotification";
 import ActivityLogButton from "@/components/ActivityLogButton";
 import ActivityLog from "@/components/ActivityLog";
 import {
+  useDeliveries,
   useMyDeliveries,
+  useAssignDelivery,
   usePickupDelivery,
   useDeliverDelivery,
   useFailDelivery,
 } from "@/hooks/useDeliveries";
+import { workstationAuth } from "@/services/api";
 import type { Delivery } from "@/types/delivery";
 
 const DeliveryPage = () => {
@@ -68,12 +71,31 @@ const DeliveryPage = () => {
     15000,
   );
 
+  // Available = unassigned deliveries any rider can pick up (self-assign).
+  const { data: availablePage } = useDeliveries({ status: "pending", limit: 50 }, 5000);
+
   const active = activePage?.data ?? [];
   const completed = completedPage?.data ?? [];
+  const available = availablePage?.data ?? [];
+
+  const currentStaffId = workstationAuth.getStaff()?.id ?? "";
 
   const pickup = usePickupDelivery();
   const deliver = useDeliverDelivery();
   const fail = useFailDelivery();
+  const assign = useAssignDelivery();
+
+  const handleAccept = (d: Delivery) => {
+    assign.mutate(
+      { id: d.id, riderStaffId: currentStaffId },
+      {
+        onSuccess: () =>
+          setToast({ open: true, type: "success", title: "Assigned to you", message: `Order #${d.orderNumber} is yours.` }),
+        onError: (e: Error) =>
+          setToast({ open: true, type: "error", title: "Couldn't accept", message: e.message }),
+      },
+    );
+  };
 
   const elapsedMin = (iso: string) =>
     Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
@@ -193,10 +215,40 @@ const DeliveryPage = () => {
           </TabsList>
 
           <TabsContent value="active" className="mt-6">
+            {/* Available to accept — unassigned ready deliveries any rider can take */}
+            {available.length > 0 && (
+              <div className="mb-6">
+                <h3 className="text-sm font-semibold text-muted-foreground mb-3">
+                  Available to accept ({available.length})
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {available.map((d) => (
+                    <div key={d.id} className="bg-card border border-border rounded-2xl p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-bold text-foreground">#{d.orderNumber}</span>
+                        <Badge className="bg-status-warning/10 text-status-warning">New</Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground mb-3 flex items-center gap-1">
+                        <MapPin className="w-3 h-3" />
+                        {d.address ?? "Delivery address"}
+                      </p>
+                      <Button
+                        className="w-full rounded-xl"
+                        onClick={() => handleAccept(d)}
+                        disabled={assign.isPending}
+                      >
+                        Accept order
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {isLoading && (
               <p className="text-center text-muted-foreground py-8">Loading deliveries...</p>
             )}
-            {!isLoading && active.length === 0 && (
+            {!isLoading && active.length === 0 && available.length === 0 && (
               <div className="bg-card border border-border rounded-2xl p-12 text-center">
                 <Bike className="w-16 h-16 mx-auto mb-3 opacity-30" />
                 <p className="text-muted-foreground">No active deliveries assigned to you.</p>

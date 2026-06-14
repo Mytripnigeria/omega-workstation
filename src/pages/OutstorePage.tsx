@@ -38,16 +38,32 @@ import ItemDetailsModal from "@/components/ItemDetailsModal";
 import InventoryMovementLog from "@/components/InventoryMovementLog";
 import { workstationAuth } from "@/services/api";
 import { useIngredients, useAdjustStock } from "@/hooks/useIngredients";
-import { useTransferStock } from "@/hooks/useMovements";
+import { useTransferToLocation } from "@/hooks/useMovements";
+import { useInventoryLocations } from "@/hooks/useInventoryLocations";
+import { useQuery } from "@tanstack/react-query";
+import { ingredientsService } from "@/services/ingredients";
 import type { Ingredient } from "@/types/ingredient";
 
 const ALL = "__all__";
 
+/** Staff on manager/supervisor roles may access store-room screens. */
+function canAccessStoreRooms(): boolean {
+  const staff = workstationAuth.getStaff();
+  if (!staff) return false;
+  const role = (staff.roleName ?? "").toLowerCase();
+  if (role.includes("manager") || role.includes("supervisor")) return true;
+  return (staff.permissions ?? []).some((p) =>
+    ["manage_inventory", "manage_orders", "manage_store"].includes(p),
+  );
+}
+
 const OutstorePage = () => {
   const navigate = useNavigate();
   const staff = workstationAuth.getStaff();
+  const allowed = canAccessStoreRooms();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>(ALL);
+  const [locationId, setLocationId] = useState<string>(ALL);
   const [selectedItem, setSelectedItem] = useState<Ingredient | null>(null);
   const [showActivityLog, setShowActivityLog] = useState(false);
   const [adjustModal, setAdjustModal] = useState<{
@@ -61,7 +77,8 @@ const OutstorePage = () => {
     open: boolean;
     item: Ingredient | null;
   }>({ open: false, item: null });
-  const [transferTargetId, setTransferTargetId] = useState("");
+  const [transferFromLoc, setTransferFromLoc] = useState("");
+  const [transferToLoc, setTransferToLoc] = useState("");
   const [transferQty, setTransferQty] = useState("");
   const [transferReason, setTransferReason] = useState("");
   const [toast, setToast] = useState<{
@@ -71,9 +88,18 @@ const OutstorePage = () => {
     message?: string;
   }>({ open: false, type: "success", title: "" });
 
+  // Out-Store type locations for the location filter.
+  const { data: locPage } = useInventoryLocations({
+    storeId: staff?.storeId,
+    type: "outstore",
+    limit: 100,
+  });
+  const locations = locPage?.data ?? [];
+
   const { data: page, isLoading } = useIngredients({
     storeId: staff?.storeId,
     status: statusFilter === "low" ? "low" : undefined,
+    locationId: locationId === ALL ? undefined : locationId,
     limit: 100,
   });
 
@@ -87,7 +113,16 @@ const OutstorePage = () => {
   );
 
   const adjustStock = useAdjustStock();
-  const transfer = useTransferStock();
+  const transfer = useTransferToLocation();
+
+  const transferLocsQuery = useQuery({
+    queryKey: ["ingredient-locations", transferModal.item?.id],
+    queryFn: () => ingredientsService.listLocations(transferModal.item!.id),
+    enabled: !!transferModal.item,
+  });
+  const itemLocations = transferLocsQuery.data ?? [];
+  const locationName = (id: string) =>
+    locations.find((l) => l.id === id)?.name ?? id;
 
   const isLowStock = (i: Ingredient) =>
     Number(i.currentStock) <= Number(i.minStock);
@@ -150,13 +185,21 @@ const OutstorePage = () => {
 
   const openTransfer = (item: Ingredient) => {
     setTransferModal({ open: true, item });
-    setTransferTargetId("");
+    setTransferFromLoc("");
+    setTransferToLoc("");
     setTransferQty("");
     setTransferReason("");
   };
 
   const submitTransfer = () => {
-    if (!transferModal.item || !transferTargetId) return;
+    if (!transferModal.item || !transferFromLoc || !transferToLoc) {
+      setToast({ open: true, type: "error", title: "Pick source and destination locations" });
+      return;
+    }
+    if (transferFromLoc === transferToLoc) {
+      setToast({ open: true, type: "error", title: "Locations must differ" });
+      return;
+    }
     const qty = Number(transferQty);
     if (!Number.isFinite(qty) || qty <= 0) {
       setToast({ open: true, type: "error", title: "Invalid quantity" });
@@ -164,8 +207,9 @@ const OutstorePage = () => {
     }
     transfer.mutate(
       {
-        fromId: transferModal.item.id,
-        toIngredientId: transferTargetId,
+        id: transferModal.item.id,
+        fromLocationId: transferFromLoc,
+        toLocationId: transferToLoc,
         quantity: qty,
         reason: transferReason.trim() || undefined,
       },
@@ -179,6 +223,23 @@ const OutstorePage = () => {
       },
     );
   };
+
+  if (!allowed) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div className="bg-card border border-border rounded-2xl p-8 text-center max-w-sm">
+          <Package className="w-12 h-12 mx-auto mb-3 opacity-30" />
+          <h1 className="text-lg font-bold text-foreground mb-1">Restricted</h1>
+          <p className="text-sm text-muted-foreground mb-4">
+            Outstore inventory is available to managers and supervisors only.
+          </p>
+          <Button onClick={() => navigate("/dashboard")} className="rounded-xl">
+            Back to dashboard
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -233,6 +294,19 @@ const OutstorePage = () => {
                   className="pl-10 rounded-xl"
                 />
               </div>
+              <Select value={locationId} onValueChange={setLocationId}>
+                <SelectTrigger className="w-full sm:w-52 rounded-xl">
+                  <SelectValue placeholder="All locations" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL}>All locations</SelectItem>
+                  {locations.map((loc) => (
+                    <SelectItem key={loc.id} value={loc.id}>
+                      {loc.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-full sm:w-44 rounded-xl">
                   <Filter className="w-4 h-4 mr-2" />
@@ -428,22 +502,44 @@ const OutstorePage = () => {
           <div className="space-y-3">
             <div>
               <label className="text-sm font-medium text-foreground mb-2 block">
-                Destination ingredient
+                From location
               </label>
-              <Select value={transferTargetId} onValueChange={setTransferTargetId}>
+              <Select value={transferFromLoc} onValueChange={setTransferFromLoc}>
                 <SelectTrigger className="rounded-xl">
-                  <SelectValue placeholder="Pick destination" />
+                  <SelectValue placeholder="Source location" />
                 </SelectTrigger>
                 <SelectContent>
-                  {ingredients
-                    .filter((i) => i.id !== transferModal.item?.id)
-                    .map((i) => (
-                      <SelectItem key={i.id} value={i.id}>
-                        {i.name}
+                  {itemLocations.map((l) => (
+                    <SelectItem key={l.locationId} value={l.locationId}>
+                      {locationName(l.locationId)} ({Number(l.currentStock)})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-foreground mb-2 block">
+                To location
+              </label>
+              <Select value={transferToLoc} onValueChange={setTransferToLoc}>
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue placeholder="Destination location" />
+                </SelectTrigger>
+                <SelectContent>
+                  {itemLocations
+                    .filter((l) => l.locationId !== transferFromLoc)
+                    .map((l) => (
+                      <SelectItem key={l.locationId} value={l.locationId}>
+                        {locationName(l.locationId)} ({Number(l.currentStock)})
                       </SelectItem>
                     ))}
                 </SelectContent>
               </Select>
+              {itemLocations.length < 2 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Item must be stocked in at least two locations to transfer.
+                </p>
+              )}
             </div>
             <div>
               <label className="text-sm font-medium text-foreground mb-2 block">
@@ -481,7 +577,7 @@ const OutstorePage = () => {
               <Button
                 className="flex-1 rounded-xl"
                 onClick={submitTransfer}
-                disabled={!transferTargetId || transfer.isPending}
+                disabled={!transferFromLoc || !transferToLoc || transfer.isPending}
               >
                 Transfer
               </Button>

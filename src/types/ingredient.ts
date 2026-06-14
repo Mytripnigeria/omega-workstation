@@ -20,6 +20,8 @@ export interface IngredientFilter {
   storeId?: string;
   search?: string;
   status?: string;
+  /** Filter to ingredients stocked at this inventory location. */
+  locationId?: string;
   page?: number;
   limit?: number;
 }

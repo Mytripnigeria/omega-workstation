@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Users,
   Clock,
@@ -8,6 +8,7 @@ import {
   Bike,
   ShoppingBag,
   ArrowLeft,
+  AlertTriangle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
@@ -22,13 +23,38 @@ const LobbyPage = () => {
 
   // Show open orders that haven't been served yet — what the customer is "waiting on".
   const { data: page, isLoading } = useOrders(
-    { status: "pending,preparing,ready", limit: 50 },
+    { status: "preparing,ready", limit: 50 },
     5000,
   );
-  const orders = page?.data ?? [];
 
+  // 1s tick so timers update in real time.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setTick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const DEFAULT_PREP_MINUTES = 15;
   const elapsedMin = (createdAt: string) =>
     Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000);
+  const remainingSec = (createdAt: string) =>
+    DEFAULT_PREP_MINUTES * 60 -
+    Math.floor((Date.now() - new Date(createdAt).getTime()) / 1000);
+  const fmtSec = (s: number) => {
+    const neg = s < 0;
+    const a = Math.abs(s);
+    return `${neg ? "-" : ""}${Math.floor(a / 60)}:${String(a % 60).padStart(2, "0")}`;
+  };
+
+  // Ready first (oldest waiting first), then preparing (most late first).
+  const all = page?.data ?? [];
+  const readyOrders = all
+    .filter((o) => o.status === "ready")
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  const preparingOrders = all
+    .filter((o) => o.status === "preparing")
+    .sort((a, b) => remainingSec(a.createdAt) - remainingSec(b.createdAt));
+  const orders = [...readyOrders, ...preparingOrders];
 
   const channelIcon = (channel: Order["channel"]) => {
     if (channel === "pos") return <Monitor className="w-3 h-3" />;
@@ -84,7 +110,7 @@ const LobbyPage = () => {
         </div>
       </header>
 
-      <main className="page-container max-w-5xl mx-auto">
+      <main className="page-container">
         {isLoading && (
           <p className="text-center text-muted-foreground py-8">Loading...</p>
         )}
@@ -96,7 +122,7 @@ const LobbyPage = () => {
           </div>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
           {orders.map((order) => {
             const elapsed = elapsedMin(order.createdAt);
             const t = orderType(order);
@@ -134,10 +160,31 @@ const LobbyPage = () => {
                 </div>
 
                 <div className="flex items-center justify-between pt-3 border-t border-border">
-                  <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                    <Clock className="w-4 h-4" />
-                    Waiting {elapsed} min
-                  </div>
+                  {order.status === "ready" ? (
+                    <div className="flex items-center gap-1 text-sm font-medium text-status-success">
+                      <Clock className="w-4 h-4" />
+                      Ready · waiting {elapsed} min
+                    </div>
+                  ) : (
+                    (() => {
+                      const rem = remainingSec(order.createdAt);
+                      const late = rem < 0;
+                      return (
+                        <div
+                          className={`flex items-center gap-1 text-sm font-medium ${
+                            late ? "text-status-error" : "text-muted-foreground"
+                          }`}
+                        >
+                          {late ? (
+                            <AlertTriangle className="w-4 h-4" />
+                          ) : (
+                            <Clock className="w-4 h-4" />
+                          )}
+                          {fmtSec(rem)}
+                        </div>
+                      );
+                    })()
+                  )}
                   <span className="text-sm text-muted-foreground">
                     {order.items.length} item{order.items.length === 1 ? "" : "s"}
                   </span>

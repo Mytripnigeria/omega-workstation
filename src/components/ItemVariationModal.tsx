@@ -22,6 +22,13 @@ interface VariationGroup {
   options: Variation[];
 }
 
+interface AddonGroup {
+  id: string;
+  name: string;
+  maxSelection: number | null;
+  options: Variation[];
+}
+
 interface MenuItem {
   id: string;
   name: string;
@@ -30,6 +37,7 @@ interface MenuItem {
   image?: string;
   description?: string;
   variations?: VariationGroup[];
+  addonGroups?: AddonGroup[];
 }
 
 interface ItemVariationModalProps {
@@ -41,7 +49,9 @@ interface ItemVariationModalProps {
 const ItemVariationModal = ({ item, onClose, onAddToCart }: ItemVariationModalProps) => {
   const [selectedVariations, setSelectedVariations] = useState<Record<string, Variation>>({});
 
-  if (!item || !item.variations) return null;
+  if (!item) return null;
+  const variationGroups = item.variations ?? [];
+  const addonGroups = item.addonGroups ?? [];
 
   const handleSelectVariation = (groupName: string, variation: Variation) => {
     setSelectedVariations((prev) => ({
@@ -50,7 +60,28 @@ const ItemVariationModal = ({ item, onClose, onAddToCart }: ItemVariationModalPr
     }));
   };
 
-  const allRequiredSelected = item.variations
+  // Add-ons are multi-select and additive — folded into selectedVariations
+  // under an `addon:<id>` key so the cart price/text plumbing includes them.
+  const isAddonSelected = (addonId: string) => !!selectedVariations[`addon:${addonId}`];
+  const toggleAddon = (group: AddonGroup, addon: Variation) => {
+    const key = `addon:${addon.id}`;
+    setSelectedVariations((prev) => {
+      const next = { ...prev };
+      if (next[key]) {
+        delete next[key];
+        return next;
+      }
+      // Respect maxSelection per group.
+      if (group.maxSelection) {
+        const chosen = group.options.filter((o) => prev[`addon:${o.id}`]).length;
+        if (chosen >= group.maxSelection) return prev;
+      }
+      next[key] = addon;
+      return next;
+    });
+  };
+
+  const allRequiredSelected = variationGroups
     .filter((g) => g.required)
     .every((g) => selectedVariations[g.name]);
 
@@ -76,7 +107,7 @@ const ItemVariationModal = ({ item, onClose, onAddToCart }: ItemVariationModalPr
         </DialogHeader>
 
         <div className="space-y-6 py-4">
-          {item.variations.map((group) => (
+          {variationGroups.map((group) => (
             <div key={group.name}>
               <div className="flex items-center gap-2 mb-3">
                 <h4 className="font-medium text-foreground">{group.name}</h4>
@@ -116,6 +147,53 @@ const ItemVariationModal = ({ item, onClose, onAddToCart }: ItemVariationModalPr
                     )}
                   </button>
                 ))}
+              </div>
+            </div>
+          ))}
+
+          {addonGroups.map((group) => (
+            <div key={group.id}>
+              <div className="flex items-center gap-2 mb-3">
+                <h4 className="font-medium text-foreground">{group.name}</h4>
+                <Badge variant="outline" className="text-xs">
+                  Add-ons{group.maxSelection ? ` · max ${group.maxSelection}` : ""}
+                </Badge>
+              </div>
+              <div className="space-y-2">
+                {group.options.map((option) => {
+                  const selected = isAddonSelected(option.id);
+                  return (
+                    <button
+                      key={option.id}
+                      onClick={() => toggleAddon(group, option)}
+                      className={`w-full flex items-center justify-between p-3 rounded-lg border transition-all ${
+                        selected
+                          ? "border-primary bg-primary/10"
+                          : "border-border hover:border-primary/50"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`w-5 h-5 rounded-md border-2 flex items-center justify-center ${
+                            selected
+                              ? "border-primary bg-primary"
+                              : "border-muted-foreground"
+                          }`}
+                        >
+                          {selected && (
+                            <Check className="w-3 h-3 text-primary-foreground" />
+                          )}
+                        </div>
+                        <span className="text-foreground">{option.name}</span>
+                      </div>
+                      {option.priceModifier !== 0 && (
+                        <span className="text-muted-foreground text-sm">
+                          +₦{option.priceModifier.toFixed(2)}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           ))}

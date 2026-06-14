@@ -8,6 +8,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useRef } from "react";
+import { useReceiptInfo } from "@/hooks/useReceiptInfo";
+import { workstationAuth } from "@/services/api";
 
 interface OrderItem {
   name: string;
@@ -43,6 +45,11 @@ const ReceiptModal = ({
   tableNumber,
   date = new Date(),
 }: ReceiptModalProps) => {
+  const { data: info } = useReceiptInfo();
+  const sessionStaff = workstationAuth.getStaff();
+  const staffName = sessionStaff
+    ? `${sessionStaff.firstName} ${sessionStaff.lastName}`.trim()
+    : "";
   const receiptRef = useRef<HTMLDivElement>(null);
 
   const handlePrint = () => {
@@ -133,9 +140,18 @@ const ReceiptModal = ({
         <div ref={receiptRef} className="bg-card border border-border rounded-lg p-4 font-mono text-sm">
           {/* Header */}
           <div className="receipt-header text-center mb-4">
-            <h3 className="font-bold text-lg text-foreground">Mr. Jollof</h3>
-            <p className="text-muted-foreground text-xs">Makurdi Branch</p>
-            <p className="text-muted-foreground text-xs">123 Main Street, Makurdi</p>
+            <h3 className="font-bold text-lg text-foreground">
+              {info?.receiptHeader || info?.storeName || "Receipt"}
+            </h3>
+            {info?.storeName && info?.receiptHeader && (
+              <p className="text-muted-foreground text-xs">{info.storeName}</p>
+            )}
+            {info?.address && (
+              <p className="text-muted-foreground text-xs">{info.address}</p>
+            )}
+            {info?.phone && (
+              <p className="text-muted-foreground text-xs">{info.phone}</p>
+            )}
           </div>
 
           <Separator className="my-3 separator" />
@@ -158,6 +174,12 @@ const ReceiptModal = ({
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Customer:</span>
                 <span className="text-foreground">{customerName}</span>
+              </div>
+            )}
+            {staffName && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Served by:</span>
+                <span className="text-foreground">{staffName}</span>
               </div>
             )}
             {tableNumber && (
@@ -223,8 +245,11 @@ const ReceiptModal = ({
           </div>
 
           <div className="footer text-center mt-4 text-xs text-muted-foreground">
-            <p>Thank you for dining with us!</p>
-            <p>www.mrjollof.com</p>
+            {info?.receiptFooter ? (
+              info.receiptFooter.split("\n").map((line, i) => <p key={i}>{line}</p>)
+            ) : (
+              <p>Thank you!</p>
+            )}
           </div>
         </div>
 

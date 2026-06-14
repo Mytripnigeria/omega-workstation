@@ -41,6 +41,30 @@ export const ordersService = {
       body: JSON.stringify({ status }),
     }),
 
+  /** Accept an incoming order: INITIATED → PENDING. */
+  accept: (id: string): Promise<Order> =>
+    workstationApi.request<Order>(`/orders/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: "pending" }),
+    }),
+
+  /**
+   * Quick Bill an incoming order: skip the kitchen, INITIATED/PENDING → READY.
+   * For ready-made items (snacks, drinks).
+   */
+  quickBill: (id: string): Promise<Order> =>
+    workstationApi.request<Order>(`/orders/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: "ready" }),
+    }),
+
+  /** Reject an incoming order (cancel with reason). */
+  reject: (id: string, reason?: string): Promise<Order> =>
+    workstationApi.request<Order>(`/orders/${id}/cancel`, {
+      method: "POST",
+      body: JSON.stringify({ reason: reason ?? "Rejected" }),
+    }),
+
   cancel: (id: string, reason?: string): Promise<Order> =>
     workstationApi.request<Order>(`/orders/${id}/cancel`, {
       method: "POST",

@@ -10,6 +10,21 @@ export interface ProductVariation {
   stock: number;
 }
 
+export interface ProductAddon {
+  id: string;
+  name: string;
+  price: number;
+  isAvailable: boolean;
+}
+
+export interface ProductAddonGroup {
+  id: string;
+  name: string;
+  minSelection: number;
+  maxSelection: number | null;
+  addons: ProductAddon[];
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -26,6 +41,7 @@ export interface Product {
   visibility: string[] | null;
   storeId: string;
   variations: ProductVariation[];
+  addonGroups?: ProductAddonGroup[];
 }
 
 export interface ProductListParams {

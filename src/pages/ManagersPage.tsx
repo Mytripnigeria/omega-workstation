@@ -15,7 +15,9 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { isManagerRole } from "@/lib/roles";
 import ActivityLogButton from "@/components/ActivityLogButton";
 import ActivityLog from "@/components/ActivityLog";
 import {
@@ -50,6 +52,22 @@ const ManagersPage = () => {
   const staffPerf = useStaffPerformance(range);
   const onShift = useShifts({ status: "in-progress", limit: 50 });
   const activity = useActivityLog({ limit: 15 });
+
+  if (!isManagerRole()) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div className="bg-card border border-border rounded-2xl p-8 text-center max-w-sm">
+          <h1 className="text-lg font-bold text-foreground mb-1">Restricted</h1>
+          <p className="text-sm text-muted-foreground mb-4">
+            The Managers overview is available to managers only.
+          </p>
+          <Button onClick={() => navigate("/dashboard")} className="rounded-xl">
+            Back to dashboard
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">

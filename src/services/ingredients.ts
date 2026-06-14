@@ -66,6 +66,27 @@ export const ingredientsService = {
       },
     ),
 
+  /** Transfer stock between two inventory locations of the same ingredient. */
+  transferToLocation: (
+    id: string,
+    fromLocationId: string,
+    toLocationId: string,
+    quantity: number,
+    reason?: string,
+  ): Promise<void> =>
+    workstationApi.request<void>(`/ingredients/${id}/transfer-to-location`, {
+      method: 'POST',
+      body: JSON.stringify({ fromLocationId, toLocationId, quantity, reason }),
+    }),
+
+  /** Per-location stock rows for one ingredient. */
+  listLocations: (
+    id: string,
+  ): Promise<
+    { id: string; locationId: string; currentStock: number; minStock: number }[]
+  > =>
+    workstationApi.request(`/ingredients/${id}/locations`),
+
   listMovements: (filter: MovementFilter = {}): Promise<PaginatedResponse<IngredientMovement>> => {
     const qs = buildQueryString(filter as Record<string, unknown>);
     return workstationApi.request<PaginatedResponse<IngredientMovement>>(

@@ -1,110 +1,36 @@
-import { useEffect, useState } from "react";
-import { ClipboardCheck, CheckCircle2, Clock, ArrowLeft } from "lucide-react";
+import { useState } from "react";
+import { ClipboardCheck, CheckCircle2, ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useNavigate } from "react-router-dom";
 import ActivityLogButton from "@/components/ActivityLogButton";
 import ActivityLog from "@/components/ActivityLog";
 import { workstationAuth } from "@/services/api";
-import { useActiveShift, useUpdateChecklist } from "@/hooks/useShifts";
-import type { ChecklistCategory, ChecklistItem } from "@/types/shift";
+import { useActiveShift } from "@/hooks/useShifts";
+import { useMyChecklists, useToggleChecklistItem } from "@/hooks/useChecklists";
 
-// Default template applied to a fresh shift that has no persisted checklist yet.
-const DEFAULT_TEMPLATE: ChecklistCategory[] = [
-  {
-    id: "opening",
-    name: "Opening Tasks",
-    items: [
-      { id: "1", task: "Turn on all kitchen equipment", completed: false, priority: "high" },
-      { id: "2", task: "Check refrigerator temperatures", completed: false, priority: "high" },
-      { id: "3", task: "Prep workstation cleaning", completed: false, priority: "medium" },
-      { id: "4", task: "Check inventory levels", completed: false, priority: "high" },
-      { id: "5", task: "Review daily specials", completed: false, priority: "medium" },
-    ],
-  },
-  {
-    id: "service",
-    name: "Service Prep",
-    items: [
-      { id: "6", task: "Prep garnishes and sides", completed: false, priority: "high" },
-      { id: "7", task: "Check sauce levels", completed: false, priority: "medium" },
-      { id: "8", task: "Organize cooking stations", completed: false, priority: "medium" },
-      { id: "9", task: "Test POS system", completed: false, priority: "low" },
-    ],
-  },
-  {
-    id: "closing",
-    name: "Closing Tasks",
-    items: [
-      { id: "10", task: "Clean all cooking surfaces", completed: false, priority: "high" },
-      { id: "11", task: "Store all perishables", completed: false, priority: "high" },
-      { id: "12", task: "Turn off equipment", completed: false, priority: "high" },
-      { id: "13", task: "Take out trash", completed: false, priority: "medium" },
-      { id: "14", task: "Lock all doors", completed: false, priority: "high" },
-    ],
-  },
-];
+const assignmentLabel: Record<string, string> = {
+  all_staff: "All staff",
+  role: "Your role",
+  staff: "Assigned to you",
+};
 
 const ChecklistPage = () => {
   const navigate = useNavigate();
   const staff = workstationAuth.getStaff();
   const [showActivityLog, setShowActivityLog] = useState(false);
 
-  const { data: shift, isLoading } = useActiveShift(staff?.id);
-  const update = useUpdateChecklist();
+  // Checklists are only available while clocked in (active shift).
+  const { data: shift, isLoading: shiftLoading } = useActiveShift(staff?.id);
+  const { data: page, isLoading: listLoading } = useMyChecklists(!!shift);
+  const toggle = useToggleChecklistItem();
 
-  const [checklist, setChecklist] = useState<ChecklistCategory[]>([]);
-  useEffect(() => {
-    if (shift?.checklist && shift.checklist.length > 0) {
-      setChecklist(shift.checklist);
-    } else if (shift) {
-      setChecklist(DEFAULT_TEMPLATE);
-    }
-  }, [shift]);
+  const checklists = page?.data ?? [];
+  const isLoading = shiftLoading || (!!shift && listLoading);
 
-  const persist = (next: ChecklistCategory[]) => {
-    setChecklist(next);
-    if (shift) {
-      update.mutate({ id: shift.id, checklist: next });
-    }
-  };
-
-  const toggleItem = (categoryId: string, itemId: string) => {
-    const next = checklist.map((category) =>
-      category.id === categoryId
-        ? {
-            ...category,
-            items: category.items.map((item) =>
-              item.id === itemId
-                ? {
-                    ...item,
-                    completed: !item.completed,
-                    completedAt: !item.completed ? new Date().toISOString() : undefined,
-                  }
-                : item,
-            ),
-          }
-        : category,
-    );
-    persist(next);
-  };
-
-  const getPriorityColor = (priority: ChecklistItem["priority"]) => {
-    switch (priority) {
-      case "high":
-        return "text-destructive border-destructive/30";
-      case "medium":
-        return "text-status-warning border-status-warning/30";
-      case "low":
-        return "text-muted-foreground border-muted";
-    }
-  };
-
-  const totalItems = checklist.reduce((sum, cat) => sum + cat.items.length, 0);
-  const completedItems = checklist.reduce(
-    (sum, cat) => sum + cat.items.filter((i) => i.completed).length,
-    0,
-  );
+  const allItems = checklists.flatMap((c) => c.items);
+  const totalItems = allItems.length;
+  const completedItems = allItems.filter((i) => i.isCompleted).length;
   const progressPercent = totalItems
     ? Math.round((completedItems / totalItems) * 100)
     : 0;
@@ -154,7 +80,14 @@ const ChecklistPage = () => {
           </div>
         )}
 
-        {shift && (
+        {shift && !isLoading && checklists.length === 0 && (
+          <div className="bg-card border border-border rounded-2xl p-12 text-center">
+            <ClipboardCheck className="w-12 h-12 mx-auto mb-3 opacity-30" />
+            <p className="text-muted-foreground">No checklists assigned to you.</p>
+          </div>
+        )}
+
+        {shift && checklists.length > 0 && (
           <>
             <div className="bg-card border border-border rounded-2xl p-6 mb-6">
               <div className="flex items-center justify-between mb-4">
@@ -166,13 +99,13 @@ const ChecklistPage = () => {
               <Progress value={progressPercent} className="h-3 mb-2" />
               <p className="text-sm text-muted-foreground">
                 {progressPercent}% complete
-                {update.isPending && " · saving…"}
+                {toggle.isPending && " · saving…"}
               </p>
             </div>
 
             <div className="space-y-6">
-              {checklist.map((category) => {
-                const categoryCompleted = category.items.filter((i) => i.completed).length;
+              {checklists.map((category) => {
+                const categoryCompleted = category.items.filter((i) => i.isCompleted).length;
                 const categoryTotal = category.items.length;
 
                 return (
@@ -181,7 +114,12 @@ const ChecklistPage = () => {
                     className="bg-card border border-border rounded-2xl overflow-hidden"
                   >
                     <div className="bg-secondary/50 px-5 py-4 flex items-center justify-between">
-                      <h4 className="font-semibold text-foreground">{category.name}</h4>
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-semibold text-foreground">{category.name}</h4>
+                        <Badge variant="outline" className="text-xs">
+                          {assignmentLabel[category.assignmentType] ?? category.assignmentType}
+                        </Badge>
+                      </div>
                       <Badge variant="outline">
                         {categoryCompleted}/{categoryTotal}
                       </Badge>
@@ -190,48 +128,43 @@ const ChecklistPage = () => {
                       {category.items.map((item) => (
                         <button
                           key={item.id}
-                          onClick={() => toggleItem(category.id, item.id)}
-                          disabled={update.isPending}
+                          onClick={() =>
+                            toggle.mutate({
+                              checklistId: category.id,
+                              itemId: item.id,
+                              isCompleted: !item.isCompleted,
+                            })
+                          }
+                          disabled={toggle.isPending}
                           className="w-full p-4 flex items-center gap-4 hover:bg-secondary/20 transition-colors text-left disabled:opacity-60"
                         >
                           <div
                             className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors flex-shrink-0 ${
-                              item.completed
+                              item.isCompleted
                                 ? "bg-status-success border-status-success"
                                 : "border-muted-foreground"
                             }`}
                           >
-                            {item.completed && (
+                            {item.isCompleted && (
                               <CheckCircle2 className="w-4 h-4 text-white" />
                             )}
                           </div>
                           <div className="flex-1 min-w-0">
                             <p
                               className={`font-medium ${
-                                item.completed
+                                item.isCompleted
                                   ? "line-through text-muted-foreground"
                                   : "text-foreground"
                               }`}
                             >
-                              {item.task}
+                              {item.title}
                             </p>
-                            {item.completedAt && (
-                              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-                                <Clock className="w-3 h-3 text-foreground" />
-                                Completed at{" "}
-                                {new Date(item.completedAt).toLocaleTimeString([], {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}
+                            {item.isCompleted && item.completedByName && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Completed by {item.completedByName}
                               </p>
                             )}
                           </div>
-                          <Badge
-                            variant="outline"
-                            className={`text-xs ${getPriorityColor(item.priority)}`}
-                          >
-                            {item.priority}
-                          </Badge>
                         </button>
                       ))}
                     </div>
@@ -247,7 +180,7 @@ const ChecklistPage = () => {
         open={showActivityLog}
         onClose={() => setShowActivityLog(false)}
         pageName="Shift Checklist"
-        resourceType="shift"
+        resourceType="checklist"
         resourceId={shift?.id}
       />
     </div>

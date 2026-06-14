@@ -1,8 +1,10 @@
 // Mirrors backend OrderResponseDto.
 export type OrderStatus =
+  | "initiated"
   | "pending"
   | "preparing"
   | "ready"
+  | "delivering"
   | "served"
   | "completed"
   | "cancelled";
@@ -85,6 +87,10 @@ export interface CreateOrderInput {
   notes?: string;
   discountAmount?: number;
   taxAmount?: number;
+  /** Cashier accepts on create (Process Bill): skips INITIATED, starts PENDING. */
+  accept?: boolean;
+  /** Quick Bill: ready-made items only, skips the kitchen and starts READY. */
+  quickBill?: boolean;
   items: CreateOrderItemInput[];
 }
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Users,
@@ -34,11 +34,20 @@ const WaiterPage = () => {
   }>({ open: false, type: "success", title: "" });
   const [showActivityLog, setShowActivityLog] = useState(false);
 
-  // Ready orders, polled every 5s.
+  // Ready orders, polled every 5s, oldest first (longest-waiting at the top).
   const { data: readyPage, isLoading } = useOrders({ status: "ready", limit: 50 }, 5000);
-  const orders = readyPage?.data ?? [];
+  const orders = [...(readyPage?.data ?? [])].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+  );
 
   const updateStatus = useUpdateOrderStatus();
+
+  // 1s tick so the "waiting" timers count up in real time.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setTick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   const orderTypeOf = (o: Order): "dine-in" | "takeaway" | "delivery" =>
     o.isDelivery ? "delivery" : o.tableNumber ? "dine-in" : "takeaway";
@@ -53,20 +62,25 @@ const WaiterPage = () => {
     type === "dine-in" ? "Dine In" : type === "takeaway" ? "Takeaway" : "Delivery";
 
   const handleServe = (order: Order) => {
+    // Delivery orders go out for delivery; dine-in/takeaway complete immediately.
+    const isDelivery = order.isDelivery;
+    const nextStatus = isDelivery ? "delivering" : "completed";
     setConfirmDialog({
       open: true,
-      title: "Serve Order",
-      description: `Mark order #${order.orderNumber} as served?`,
+      title: isDelivery ? "Send for delivery" : "Serve Order",
+      description: isDelivery
+        ? `Mark order #${order.orderNumber} as out for delivery?`
+        : `Mark order #${order.orderNumber} as served?`,
       action: () => {
         updateStatus.mutate(
-          { id: order.id, status: "served" },
+          { id: order.id, status: nextStatus },
           {
             onSuccess: () =>
               setToast({
                 open: true,
                 type: "success",
-                title: "Order served",
-                message: `#${order.orderNumber} marked as served.`,
+                title: isDelivery ? "Out for delivery" : "Order served",
+                message: `#${order.orderNumber} updated.`,
               }),
             onError: (e: Error) =>
               setToast({
@@ -113,7 +127,7 @@ const WaiterPage = () => {
         </div>
       </header>
 
-      <main className="page-container max-w-7xl mx-auto">
+      <main className="page-container">
         {isLoading && (
           <p className="text-center text-muted-foreground py-8">Loading orders...</p>
         )}
@@ -125,7 +139,7 @@ const WaiterPage = () => {
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
           {orders.map((order) => {
             const orderType = orderTypeOf(order);
             const elapsed = elapsedMin(order.createdAt);
@@ -152,9 +166,13 @@ const WaiterPage = () => {
                     {orderTypeLabel(orderType)}
                   </div>
                   {order.tableNumber && <span>Table {order.tableNumber}</span>}
-                  <div className="flex items-center gap-1 ml-auto">
+                  <div
+                    className={`flex items-center gap-1 ml-auto font-medium ${
+                      elapsed >= 5 ? "text-status-error" : ""
+                    }`}
+                  >
                     <Clock className="w-3 h-3" />
-                    {elapsed} min
+                    Waiting {elapsed} min
                   </div>
                 </div>
 
@@ -183,7 +201,7 @@ const WaiterPage = () => {
                   onClick={() => handleServe(order)}
                   disabled={updateStatus.isPending}
                 >
-                  Mark as served
+                  {orderType === "delivery" ? "Send for delivery" : "Mark as served"}
                 </Button>
               </div>
             );

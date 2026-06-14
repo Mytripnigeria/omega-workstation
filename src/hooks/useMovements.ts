@@ -44,3 +44,33 @@ export function useTransferStock() {
     },
   });
 }
+
+export function useTransferToLocation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      fromLocationId,
+      toLocationId,
+      quantity,
+      reason,
+    }: {
+      id: string;
+      fromLocationId: string;
+      toLocationId: string;
+      quantity: number;
+      reason?: string;
+    }) =>
+      ingredientsService.transferToLocation(
+        id,
+        fromLocationId,
+        toLocationId,
+        quantity,
+        reason,
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ingredients"] });
+      qc.invalidateQueries({ queryKey: ["ingredient-movements"] });
+    },
+  });
+}

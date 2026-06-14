@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { canManageOrSupervise } from "@/lib/roles";
 import {
   ArrowLeft,
   Plus,
@@ -71,8 +72,16 @@ const ExpensesPage = () => {
     message?: string;
   }>({ open: false, type: "success", title: "" });
   const [showActivityLog, setShowActivityLog] = useState(false);
+  const [day, setDay] = useState("");
+  const [page, setPage] = useState(1);
 
-  const { data, isLoading } = useMyExpenses({ limit: 50 });
+  const { data, isLoading } = useMyExpenses({
+    limit: 20,
+    page,
+    dateFrom: day || undefined,
+    dateTo: day || undefined,
+  });
+  const totalPages = data?.totalPages ?? 1;
   const create = useCreateExpense();
   const del = useDeleteExpense();
 
@@ -169,6 +178,23 @@ const ExpensesPage = () => {
     });
   };
 
+  if (!canManageOrSupervise()) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div className="bg-card border border-border rounded-2xl p-8 text-center max-w-sm">
+          <Receipt className="w-12 h-12 mx-auto mb-3 opacity-30" />
+          <h1 className="text-lg font-bold text-foreground mb-1">Restricted</h1>
+          <p className="text-sm text-muted-foreground mb-4">
+            Expenses are available to managers and supervisors only.
+          </p>
+          <Button onClick={() => navigate("/dashboard")} className="rounded-xl">
+            Back to dashboard
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <header className="bg-card border-b border-border sticky top-0 z-50">
@@ -205,6 +231,32 @@ const ExpensesPage = () => {
       </header>
 
       <main className="page-container max-w-4xl mx-auto">
+        {/* Day filter */}
+        <div className="flex items-center gap-2 mb-4">
+          <Input
+            type="date"
+            value={day}
+            onChange={(e) => {
+              setDay(e.target.value);
+              setPage(1);
+            }}
+            className="w-auto rounded-xl"
+          />
+          {day && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="rounded-lg"
+              onClick={() => {
+                setDay("");
+                setPage(1);
+              }}
+            >
+              Clear
+            </Button>
+          )}
+        </div>
+
         {isLoading && (
           <p className="text-center text-muted-foreground py-8">Loading...</p>
         )}
@@ -272,6 +324,33 @@ const ExpensesPage = () => {
             </div>
           ))}
         </div>
+
+        {/* Pagination */}
+        {!isLoading && totalPages > 1 && (
+          <div className="flex items-center justify-center gap-3 mt-6">
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-lg"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              Previous
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              Page {page} of {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-lg"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            >
+              Next
+            </Button>
+          </div>
+        )}
       </main>
 
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
