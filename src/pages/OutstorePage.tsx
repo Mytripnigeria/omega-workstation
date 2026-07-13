@@ -40,6 +40,8 @@ import { workstationAuth } from "@/services/api";
 import { useIngredients, useAdjustStock } from "@/hooks/useIngredients";
 import { useTransferToLocation } from "@/hooks/useMovements";
 import { useInventoryLocations } from "@/hooks/useInventoryLocations";
+import { useFunctionAccess } from "@/hooks/useFunctionAccess";
+import { canAccessFunction } from "@/lib/roles";
 import { useQuery } from "@tanstack/react-query";
 import { ingredientsService } from "@/services/ingredients";
 import type { Ingredient } from "@/types/ingredient";
@@ -60,7 +62,14 @@ function canAccessStoreRooms(): boolean {
 const OutstorePage = () => {
   const navigate = useNavigate();
   const staff = workstationAuth.getStaff();
-  const allowed = canAccessStoreRooms();
+  // Merchant-configured role list wins when set; otherwise the built-in
+  // manager/supervisor gate applies.
+  const { data: functionAccess } = useFunctionAccess();
+  const allowed = canAccessFunction(
+    functionAccess?.functionRoleAccess,
+    "outstore",
+    canAccessStoreRooms(),
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>(ALL);
   const [locationId, setLocationId] = useState<string>(ALL);
@@ -73,6 +82,7 @@ const OutstorePage = () => {
   }>({ open: false, item: null, direction: "add" });
   const [adjustAmount, setAdjustAmount] = useState("");
   const [adjustReason, setAdjustReason] = useState("");
+  const [adjustLocationId, setAdjustLocationId] = useState("");
   const [transferModal, setTransferModal] = useState<{
     open: boolean;
     item: Ingredient | null;
@@ -88,20 +98,27 @@ const OutstorePage = () => {
     message?: string;
   }>({ open: false, type: "success", title: "" });
 
-  // Out-Store type locations for the location filter.
-  const { data: locPage } = useInventoryLocations({
-    storeId: staff?.storeId,
-    type: "outstore",
-    limit: 100,
-  });
+  // Out-Store type locations for the location filter. Gated on role so a
+  // non-manager never fires the request (also avoids the forced-logout path).
+  const { data: locPage } = useInventoryLocations(
+    {
+      storeId: staff?.storeId,
+      type: "outstore",
+      limit: 100,
+    },
+    { enabled: allowed },
+  );
   const locations = locPage?.data ?? [];
 
-  const { data: page, isLoading } = useIngredients({
-    storeId: staff?.storeId,
-    status: statusFilter === "low" ? "low" : undefined,
-    locationId: locationId === ALL ? undefined : locationId,
-    limit: 100,
-  });
+  const { data: page, isLoading } = useIngredients(
+    {
+      storeId: staff?.storeId,
+      status: statusFilter === "low" ? "low" : undefined,
+      locationId: locationId === ALL ? undefined : locationId,
+      limit: 100,
+    },
+    { enabled: allowed },
+  );
 
   const ingredients = useMemo(() => page?.data ?? [], [page]);
 
@@ -124,8 +141,21 @@ const OutstorePage = () => {
   const locationName = (id: string) =>
     locations.find((l) => l.id === id)?.name ?? id;
 
-  const isLowStock = (i: Ingredient) =>
-    Number(i.currentStock) <= Number(i.minStock);
+  // When a specific location is selected, show that location's stock (the
+  // quantity tagged to that location) rather than the aggregate. The Out-Store
+  // page in particular must show the per-location count, not the total.
+  const displayStockFor = (i: Ingredient): { current: number; min: number } => {
+    if (locationId === ALL) {
+      return { current: Number(i.currentStock), min: Number(i.minStock) };
+    }
+    const loc = i.locations?.find((l) => l.locationId === locationId);
+    return { current: Number(loc?.currentStock ?? 0), min: Number(loc?.minStock ?? 0) };
+  };
+
+  const isLowStock = (i: Ingredient) => {
+    const { current, min } = displayStockFor(i);
+    return current <= min;
+  };
 
   const openAdjust = (
     item: Ingredient,
@@ -134,6 +164,15 @@ const OutstorePage = () => {
     setAdjustModal({ open: true, item, direction });
     setAdjustAmount("");
     setAdjustReason(direction === "waste" ? "Spoilage" : "");
+    // Default to the currently filtered location, else the item's only location.
+    const itemLocs = item.locations ?? [];
+    setAdjustLocationId(
+      locationId !== ALL
+        ? locationId
+        : itemLocs.length === 1
+          ? itemLocs[0].locationId
+          : "",
+    );
   };
 
   const submitAdjust = () => {
@@ -153,6 +192,12 @@ const OutstorePage = () => {
       });
       return;
     }
+    // The backend requires a target location when the item is stocked in more
+    // than one — so the stock lands in the chosen Out-Store location.
+    if ((adjustModal.item.locations?.length ?? 0) > 1 && !adjustLocationId) {
+      setToast({ open: true, type: "error", title: "Pick a location" });
+      return;
+    }
     adjustStock.mutate(
       {
         id: adjustModal.item.id,
@@ -161,6 +206,7 @@ const OutstorePage = () => {
         // Tag the movement as WASTE so the merchant hub Waste Management view
         // picks it up. Add/subtract keep the default classification.
         type: adjustModal.direction === "waste" ? "waste" : undefined,
+        locationId: adjustLocationId || undefined,
       },
       {
         onSuccess: () => {
@@ -333,6 +379,7 @@ const OutstorePage = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {filteredItems.map((i) => {
                 const low = isLowStock(i);
+                const stock = displayStockFor(i);
                 return (
                   <div
                     key={i.id}
@@ -353,11 +400,16 @@ const OutstorePage = () => {
                         </Badge>
                       )}
                     </div>
-                    <p className="text-2xl font-bold text-foreground mb-3">
-                      {Number(i.currentStock)}
+                    <p className="text-2xl font-bold text-foreground">
+                      {stock.current}
                       <span className="text-sm font-normal text-muted-foreground ml-1">
                         {i.unit}
                       </span>
+                    </p>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      {locationId === ALL
+                        ? "Across all locations"
+                        : `at ${locationName(locationId)}`}
                     </p>
                     <div className="grid grid-cols-2 gap-2">
                       <Button
@@ -436,6 +488,25 @@ const OutstorePage = () => {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
+            {(adjustModal.item?.locations?.length ?? 0) > 0 && (
+              <div>
+                <label className="text-sm font-medium text-foreground mb-2 block">
+                  Location
+                </label>
+                <Select value={adjustLocationId} onValueChange={setAdjustLocationId}>
+                  <SelectTrigger className="rounded-xl">
+                    <SelectValue placeholder="Select location" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(adjustModal.item?.locations ?? []).map((l) => (
+                      <SelectItem key={l.locationId} value={l.locationId}>
+                        {locationName(l.locationId)} ({Number(l.currentStock)})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div>
               <label className="text-sm font-medium text-foreground mb-2 block">
                 Quantity ({adjustModal.item?.unit})

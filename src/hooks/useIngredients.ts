@@ -2,11 +2,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ingredientsService } from '@/services/ingredients';
 import type { IngredientFilter } from '@/types/ingredient';
 
-export function useIngredients(filter: IngredientFilter = {}) {
+export function useIngredients(
+  filter: IngredientFilter = {},
+  options: { enabled?: boolean } = {},
+) {
   return useQuery({
     queryKey: ['ingredients', filter],
     queryFn: () => ingredientsService.list(filter),
     staleTime: 60 * 1000,
+    enabled: options.enabled ?? true,
   });
 }
 
@@ -44,14 +48,23 @@ export function useAdjustStock() {
       reason,
       expiryDate,
       type,
+      locationId,
     }: {
       id: string;
       adjustment: number;
       reason?: string;
       expiryDate?: string;
       type?: 'intake' | 'consumption' | 'waste' | 'transfer' | 'correction';
+      locationId?: string;
     }) =>
-      ingredientsService.adjustStock(id, adjustment, reason, expiryDate, type),
+      ingredientsService.adjustStock(
+        id,
+        adjustment,
+        reason,
+        expiryDate,
+        type,
+        locationId,
+      ),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['ingredients'] }),
   });
 }

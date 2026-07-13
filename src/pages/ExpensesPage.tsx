@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { canManageOrSupervise } from "@/lib/roles";
+import { canAccessFunction, canManageOrSupervise } from "@/lib/roles";
+import { useFunctionAccess } from "@/hooks/useFunctionAccess";
 import {
   ArrowLeft,
   Plus,
@@ -81,6 +82,15 @@ const ExpensesPage = () => {
     dateFrom: day || undefined,
     dateTo: day || undefined,
   });
+
+  // Merchant-configured role list wins when set; otherwise the built-in
+  // manager/supervisor gate applies.
+  const { data: functionAccess } = useFunctionAccess();
+  const expensesAllowed = canAccessFunction(
+    functionAccess?.functionRoleAccess,
+    "expenses",
+    canManageOrSupervise(),
+  );
   const totalPages = data?.totalPages ?? 1;
   const create = useCreateExpense();
   const del = useDeleteExpense();
@@ -178,7 +188,7 @@ const ExpensesPage = () => {
     });
   };
 
-  if (!canManageOrSupervise()) {
+  if (!expensesAllowed) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6">
         <div className="bg-card border border-border rounded-2xl p-8 text-center max-w-sm">

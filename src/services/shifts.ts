@@ -20,8 +20,14 @@ export const shiftsService = {
 
   findOne: (id: string): Promise<Shift> => workstationApi.request<Shift>(`/shifts/${id}`),
 
-  clockIn: (id: string): Promise<Shift> =>
-    workstationApi.request<Shift>(`/shifts/${id}/clock-in`, { method: 'POST' }),
+  clockIn: (
+    id: string,
+    coords?: { latitude: number; longitude: number },
+  ): Promise<Shift> =>
+    workstationApi.request<Shift>(`/shifts/${id}/clock-in`, {
+      method: 'POST',
+      body: JSON.stringify(coords ?? {}),
+    }),
 
   clockOut: (id: string): Promise<Shift> =>
     workstationApi.request<Shift>(`/shifts/${id}/clock-out`, { method: 'POST' }),

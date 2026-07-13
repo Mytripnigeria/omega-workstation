@@ -34,11 +34,21 @@ import {
   useFailDelivery,
 } from "@/hooks/useDeliveries";
 import { workstationAuth } from "@/services/api";
+import { useFunctionAccess } from "@/hooks/useFunctionAccess";
+import { canAccessFunction } from "@/lib/roles";
+import FunctionRestricted from "@/components/FunctionRestricted";
 import type { Delivery } from "@/types/delivery";
 
 const DeliveryPage = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<"active" | "completed">("active");
+
+  // Merchant-configured role restriction (workstation settings).
+  const { data: functionAccess } = useFunctionAccess();
+  const deliveryAllowed = canAccessFunction(
+    functionAccess?.functionRoleAccess,
+    "delivery",
+  );
   const [selectedDelivery, setSelectedDelivery] = useState<Delivery | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean;
@@ -171,6 +181,10 @@ const DeliveryPage = () => {
         return <Badge>{status}</Badge>;
     }
   };
+
+  if (!deliveryAllowed) {
+    return <FunctionRestricted label="Delivery" />;
+  }
 
   return (
     <div className="min-h-screen bg-background">

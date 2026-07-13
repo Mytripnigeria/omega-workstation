@@ -15,11 +15,21 @@ import { useNavigate } from "react-router-dom";
 import ActivityLogButton from "@/components/ActivityLogButton";
 import ActivityLog from "@/components/ActivityLog";
 import { useOrders } from "@/hooks/useOrders";
+import { useFunctionAccess } from "@/hooks/useFunctionAccess";
+import { canAccessFunction } from "@/lib/roles";
+import FunctionRestricted from "@/components/FunctionRestricted";
 import type { Order } from "@/types/order";
 
 const LobbyPage = () => {
   const navigate = useNavigate();
   const [showActivityLog, setShowActivityLog] = useState(false);
+
+  // Merchant-configured role restriction (workstation settings).
+  const { data: functionAccess } = useFunctionAccess();
+  const lobbyAllowed = canAccessFunction(
+    functionAccess?.functionRoleAccess,
+    "lobby",
+  );
 
   // Show open orders that haven't been served yet — what the customer is "waiting on".
   const { data: page, isLoading } = useOrders(
@@ -37,13 +47,31 @@ const LobbyPage = () => {
   const DEFAULT_PREP_MINUTES = 15;
   const elapsedMin = (createdAt: string) =>
     Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000);
-  const remainingSec = (createdAt: string) =>
-    DEFAULT_PREP_MINUTES * 60 -
-    Math.floor((Date.now() - new Date(createdAt).getTime()) / 1000);
+  // Same semantics as the kitchen board: the order's own prep estimate,
+  // anchored to when prep actually started (fallbacks: 15 min / createdAt).
+  const remainingSec = (o: Order) =>
+    (o.estimatedPrepMinutes ?? DEFAULT_PREP_MINUTES) * 60 -
+    Math.floor(
+      (Date.now() - new Date(o.preparingStartedAt ?? o.createdAt).getTime()) / 1000,
+    );
   const fmtSec = (s: number) => {
     const neg = s < 0;
     const a = Math.abs(s);
-    return `${neg ? "-" : ""}${Math.floor(a / 60)}:${String(a % 60).padStart(2, "0")}`;
+    const totalMin = Math.floor(a / 60);
+    const secs = String(a % 60).padStart(2, "0");
+    if (totalMin >= 60) {
+      const h = Math.floor(totalMin / 60);
+      const m = String(totalMin % 60).padStart(2, "0");
+      return `${neg ? "-" : ""}${h}H ${m}:${secs}`;
+    }
+    return `${neg ? "-" : ""}${totalMin}:${secs}`;
+  };
+  const formatWaitHM = (minutes: number) => {
+    const m = Math.max(0, Math.floor(minutes));
+    if (m < 60) return `${m}Min`;
+    const h = Math.floor(m / 60);
+    const rem = m % 60;
+    return rem === 0 ? `${h}H` : `${h}H, ${rem}Min`;
   };
 
   // Ready first (oldest waiting first), then preparing (most late first).
@@ -53,7 +81,7 @@ const LobbyPage = () => {
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   const preparingOrders = all
     .filter((o) => o.status === "preparing")
-    .sort((a, b) => remainingSec(a.createdAt) - remainingSec(b.createdAt));
+    .sort((a, b) => remainingSec(a) - remainingSec(b));
   const orders = [...readyOrders, ...preparingOrders];
 
   const channelIcon = (channel: Order["channel"]) => {
@@ -80,6 +108,10 @@ const LobbyPage = () => {
         return "bg-muted text-muted-foreground";
     }
   };
+
+  if (!lobbyAllowed) {
+    return <FunctionRestricted label="Lobby" />;
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -163,11 +195,11 @@ const LobbyPage = () => {
                   {order.status === "ready" ? (
                     <div className="flex items-center gap-1 text-sm font-medium text-status-success">
                       <Clock className="w-4 h-4" />
-                      Ready · waiting {elapsed} min
+                      Ready · waiting {formatWaitHM(elapsed)}
                     </div>
                   ) : (
                     (() => {
-                      const rem = remainingSec(order.createdAt);
+                      const rem = remainingSec(order);
                       const late = rem < 0;
                       return (
                         <div

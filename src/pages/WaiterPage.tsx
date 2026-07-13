@@ -16,10 +16,32 @@ import ToastNotification from "@/components/ToastNotification";
 import ActivityLogButton from "@/components/ActivityLogButton";
 import ActivityLog from "@/components/ActivityLog";
 import { useOrders, useUpdateOrderStatus } from "@/hooks/useOrders";
+import { useDeliveries } from "@/hooks/useDeliveries";
+import { useFunctionAccess } from "@/hooks/useFunctionAccess";
+import { canAccessFunction } from "@/lib/roles";
+import FunctionRestricted from "@/components/FunctionRestricted";
 import type { Order } from "@/types/order";
+
+function variationLabel(variation?: Record<string, unknown> | null): string | null {
+  if (!variation) return null;
+  const name = (variation as { name?: unknown }).name;
+  return typeof name === "string" && name.trim() ? name : null;
+}
+function addonsLabel(addons?: Record<string, unknown>[] | null): string | null {
+  if (!addons || addons.length === 0) return null;
+  const names = addons.map((a) => (a as { name?: unknown }).name).filter((n): n is string => typeof n === "string" && n.trim().length > 0);
+  return names.length ? names.join(", ") : null;
+}
 
 const WaiterPage = () => {
   const navigate = useNavigate();
+
+  // Merchant-configured role restriction (workstation settings).
+  const { data: functionAccess } = useFunctionAccess();
+  const waiterAllowed = canAccessFunction(
+    functionAccess?.functionRoleAccess,
+    "waiter",
+  );
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean;
     title: string;
@@ -41,6 +63,17 @@ const WaiterPage = () => {
   );
 
   const updateStatus = useUpdateOrderStatus();
+
+  // Delivery orders can only be sent out once a rider has accepted them —
+  // poll open deliveries and index rider assignment by orderId.
+  const hasDeliveryOrders = orders.some((o) => o.isDelivery);
+  const { data: deliveriesPage } = useDeliveries(
+    hasDeliveryOrders ? { status: "pending,assigned,in_transit", limit: 100 } : {},
+    hasDeliveryOrders ? 5000 : undefined,
+  );
+  const riderAssignedByOrderId = new Map(
+    (deliveriesPage?.data ?? []).map((d) => [d.orderId, !!d.riderStaffId]),
+  );
 
   // 1s tick so the "waiting" timers count up in real time.
   const [, setTick] = useState(0);
@@ -97,6 +130,10 @@ const WaiterPage = () => {
 
   const elapsedMin = (createdAt: string) =>
     Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000);
+
+  if (!waiterAllowed) {
+    return <FunctionRestricted label="Waiter" />;
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -178,12 +215,20 @@ const WaiterPage = () => {
 
                 <ul className="space-y-1 mb-4">
                   {order.items.map((item) => (
-                    <li key={item.id} className="flex justify-between text-sm">
-                      <span className="text-foreground">
-                        {item.quantity}× {item.name}
-                      </span>
-                      {item.notes && (
-                        <span className="text-xs text-muted-foreground italic">{item.notes}</span>
+                    <li key={item.id} className="text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-foreground">
+                          {item.quantity}× {item.name}
+                        </span>
+                        {item.notes && (
+                          <span className="text-xs text-muted-foreground italic">{item.notes}</span>
+                        )}
+                      </div>
+                      {variationLabel(item.variation) && (
+                        <p className="text-xs text-muted-foreground">{variationLabel(item.variation)}</p>
+                      )}
+                      {addonsLabel(item.addons) && (
+                        <p className="text-xs text-muted-foreground">+ {addonsLabel(item.addons)}</p>
                       )}
                     </li>
                   ))}
@@ -199,9 +244,16 @@ const WaiterPage = () => {
                 <Button
                   className="w-full rounded-xl"
                   onClick={() => handleServe(order)}
-                  disabled={updateStatus.isPending}
+                  disabled={
+                    updateStatus.isPending ||
+                    (orderType === "delivery" && !riderAssignedByOrderId.get(order.id))
+                  }
                 >
-                  {orderType === "delivery" ? "Send for delivery" : "Mark as served"}
+                  {orderType === "delivery"
+                    ? riderAssignedByOrderId.get(order.id)
+                      ? "Send for delivery"
+                      : "Waiting for rider"
+                    : "Mark as served"}
                 </Button>
               </div>
             );
