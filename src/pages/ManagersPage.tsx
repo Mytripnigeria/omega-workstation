@@ -17,7 +17,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { isManagerRole } from "@/lib/roles";
+import { canAccessFunction, isManagerRole } from "@/lib/roles";
+import { useFunctionAccess } from "@/hooks/useFunctionAccess";
 import ActivityLogButton from "@/components/ActivityLogButton";
 import ActivityLog from "@/components/ActivityLog";
 import {
@@ -53,7 +54,15 @@ const ManagersPage = () => {
   const onShift = useShifts({ status: "in-progress", limit: 50 });
   const activity = useActivityLog({ limit: 15 });
 
-  if (!isManagerRole()) {
+  // Merchant-configured role list wins when set; otherwise manager-only.
+  const { data: functionAccess } = useFunctionAccess();
+  const allowed = canAccessFunction(
+    functionAccess?.functionRoleAccess,
+    "managers",
+    isManagerRole(),
+  );
+
+  if (!allowed) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6">
         <div className="bg-card border border-border rounded-2xl p-8 text-center max-w-sm">

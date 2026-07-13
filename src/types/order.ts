@@ -50,6 +50,13 @@ export interface Order {
   paymentMethodId: string | null;
   paidAt: string | null;
   notes: string | null;
+  /** Longest item prep time (minutes); drives the kitchen countdown length. */
+  estimatedPrepMinutes: number | null;
+  /** When the order entered PREPARING; the kitchen countdown anchors on this. */
+  preparingStartedAt: string | null;
+  /** Staff who clicked Start Preparing. Optional until the backend exposes it. */
+  preparingStaffId?: string | null;
+  preparingStaffName?: string | null;
   items: OrderItem[];
   createdAt: string;
   updatedAt: string;

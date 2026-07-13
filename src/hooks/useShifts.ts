@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { shiftsService } from '@/services/shifts';
+import { getCurrentCoords } from '@/lib/geolocation';
 import type { ChecklistCategory, ShiftFilter } from '@/types/shift';
 
 export function useShifts(filter: ShiftFilter = {}) {
@@ -34,7 +35,12 @@ export function useActiveShift(staffId: string | undefined) {
 export function useClockIn() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => shiftsService.clockIn(id),
+    // Capture device coords transparently so geofenced clock-in works without
+    // changing callers; the backend ignores them unless geofencing is enabled.
+    mutationFn: async (id: string) => {
+      const coords = await getCurrentCoords();
+      return shiftsService.clockIn(id, coords ?? undefined);
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['shifts'] }),
   });
 }

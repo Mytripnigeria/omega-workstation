@@ -13,6 +13,24 @@ export function useMyActiveCashSession() {
   });
 }
 
+/** Open registers on my store I can join. Only fetched when `enabled`. */
+export function useStoreActiveCashSessions(enabled: boolean) {
+  return useQuery({
+    queryKey: ["cash-session", "store-active"],
+    queryFn: () => cashSessionsService.storeActive(),
+    staleTime: 10 * 1000,
+    enabled,
+  });
+}
+
+export function useJoinCashSession() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => cashSessionsService.join(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["cash-session"] }),
+  });
+}
+
 export function useOpenCashSession() {
   const qc = useQueryClient();
   return useMutation({

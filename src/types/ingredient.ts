@@ -1,3 +1,13 @@
+// Mirrors backend IngredientLocationStockResponseDto.
+export interface IngredientLocationStock {
+  id: string;
+  locationId: string;
+  currentStock: number;
+  minStock: number;
+  lastRestocked: string | null;
+  expiryDate: string | null;
+}
+
 // Mirrors backend IngredientResponseDto.
 export interface Ingredient {
   id: string;
@@ -12,6 +22,8 @@ export interface Ingredient {
   lastRestocked: string | null;
   /** Best-before / use-by date for the current batch (YYYY-MM-DD), or null. */
   expiryDate: string | null;
+  /** Per-location stock entries (aggregate currentStock is summed across these). */
+  locations?: IngredientLocationStock[];
   createdAt: string;
   updatedAt: string;
 }

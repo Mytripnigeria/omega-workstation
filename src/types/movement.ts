@@ -19,6 +19,9 @@ export interface IngredientMovement {
   reason: string | null;
   referenceType: string | null;
   referenceId: string | null;
+  /** Sending / receiving location names (set for `transfer` movements). */
+  fromLocationName: string | null;
+  toLocationName: string | null;
   ingredientName: string | null;
   ingredientUnit: string | null;
   createdAt: string;

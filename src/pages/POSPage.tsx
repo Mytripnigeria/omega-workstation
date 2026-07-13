@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Search,
   ShoppingCart,
@@ -65,7 +65,12 @@ import { useBeepSound } from "@/hooks/useBeepSound";
 import { useCategories } from "@/hooks/useCategories";
 import { useProducts } from "@/hooks/useProducts";
 import { useCancelOrder, useCreateOrder, useOrders, useRecordPayment, useUpdateOrderStatus } from "@/hooks/useOrders";
-import { useMyActiveCashSession, useOpenCashSession, useCloseCashSession } from "@/hooks/useCashSession";
+import { useMyActiveCashSession, useOpenCashSession, useCloseCashSession, useStoreActiveCashSessions, useJoinCashSession } from "@/hooks/useCashSession";
+import { useEnabledPaymentMethods } from "@/hooks/usePaymentMethods";
+import { useFunctionAccess } from "@/hooks/useFunctionAccess";
+import { canAccessFunction } from "@/lib/roles";
+import FunctionRestricted from "@/components/FunctionRestricted";
+import type { WorkstationPaymentMethod } from "@/services/payment-methods";
 import { Label } from "@/components/ui/label";
 import { workstationAuth } from "@/services/api";
 import {
@@ -103,6 +108,7 @@ interface MenuItem {
   description?: string;
   variations?: VariationGroup[];
   addonGroups?: AddonGroup[];
+  visibility?: string[] | null;
 }
 
 interface CartItem {
@@ -125,14 +131,25 @@ interface HeldOrder {
   createdAt: string;
 }
 
+interface IncomingOrderItem {
+  name: string;
+  quantity: number;
+  price: number;
+  variation?: Record<string, unknown> | null;
+  addons?: Record<string, unknown>[] | null;
+  notes?: string | null;
+}
+
 interface IncomingOrder {
   id: string;
   /** Real backend order UUID (the display `id` is the #orderNumber label). */
   backendId?: string;
   source: "pos" | "website" | "ubereats" | "deliveroo" | "selfservice";
   customerName: string;
-  items: { name: string; quantity: number; price: number }[];
+  items: IncomingOrderItem[];
   total: number;
+  /** Order-level customer note (shown below the items). */
+  notes?: string | null;
   time: string;
   startTime: Date;
   estimatedMinutes: number;
@@ -142,16 +159,92 @@ interface IncomingOrder {
   billType?: "quick" | "process";
 }
 
+/** Icon for a payment-method type, matching the POS button iconography. */
+function paymentIcon(type: string) {
+  if (type === "cash") return <Banknote className="w-4 h-4" />;
+  if (type === "wallet") return <Wallet className="w-4 h-4" />;
+  return <CreditCard className="w-4 h-4" />;
+}
+
+/** Maps a merchant payment-method type to the order's payment channel enum. */
+function paymentChannelForType(
+  type: string,
+): "cash" | "card" | "wallet" | "paystack" {
+  if (type === "cash") return "cash";
+  if (type === "wallet") return "wallet";
+  return "card";
+}
+
+/** Renders the human-readable variation name from an order-item snapshot. */
+function variationLabel(variation?: Record<string, unknown> | null): string | null {
+  if (!variation) return null;
+  const name = (variation as { name?: unknown }).name;
+  return typeof name === "string" && name.trim() ? name : null;
+}
+
+/** Renders the comma-joined add-on names from an order-item snapshot. */
+function addonsLabel(addons?: Record<string, unknown>[] | null): string | null {
+  if (!addons || addons.length === 0) return null;
+  const names = addons
+    .map((a) => (a as { name?: unknown }).name)
+    .filter((n): n is string => typeof n === "string" && n.trim().length > 0);
+  return names.length ? names.join(", ") : null;
+}
+
+/**
+ * Splits the POS cart's flat `selectedVariations` map into the backend's
+ * structured `variation` (the chosen variant) and `addons` (additive extras).
+ * Add-on entries are keyed `addon:<id>`; variant entries are keyed by group
+ * name. The cart's `price` already folds in every modifier, so `unitPrice`
+ * stays correct — this only surfaces the breakdown to the kitchen/waiter/hub.
+ */
+function splitSelectedVariations(selected?: Record<string, Variation>): {
+  variation?: Record<string, unknown>;
+  addons?: Record<string, unknown>[];
+} {
+  const variants: { id: string; name: string }[] = [];
+  const addons: { name: string; price: number }[] = [];
+  Object.entries(selected ?? {}).forEach(([key, v]) => {
+    if (key.startsWith("addon:")) {
+      addons.push({ name: v.name, price: v.priceModifier });
+    } else {
+      variants.push({ id: v.id, name: v.name });
+    }
+  });
+  return {
+    variation: variants.length
+      ? { name: variants.map((s) => s.name).join(", "), selections: variants }
+      : undefined,
+    addons: addons.length ? addons : undefined,
+  };
+}
+
 
 const POSPage = () => {
   const navigate = useNavigate();
   const [posMode, setPosMode] = useState<"counter" | "selfservice">("counter");
+
+  // Merchant-configured role restrictions (workstation settings). Counter POS
+  // and Self-Service are gated independently; if the current mode is denied
+  // but the other is allowed, switch instead of blocking the whole page.
+  const { data: functionAccess } = useFunctionAccess();
+  const roleMap = functionAccess?.functionRoleAccess;
+  const counterAllowed = canAccessFunction(roleMap, "counter_pos");
+  const selfAllowed = canAccessFunction(roleMap, "self_service");
+  useEffect(() => {
+    if (posMode === "counter" && !counterAllowed && selfAllowed) {
+      setPosMode("selfservice");
+    }
+  }, [posMode, counterAllowed, selfAllowed]);
   const {
     data: menuCategories = [],
     isLoading: categoriesLoading,
     isError: categoriesError,
     refetch: refetchCategories,
-  } = useCategories("menu");
+    // Load ALL menu categories (not just active ones): a category can be
+    // inactive while still holding active products, and the client expects
+    // every category that has available items (e.g. Rice, Spaghetti) to show.
+  } = useCategories("menu", { activeOnly: false });
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
 
   // Defaults to the "all" view so every loaded item is browsable without
@@ -241,6 +334,7 @@ const POSPage = () => {
           description: p.description ?? undefined,
           variations,
           addonGroups: addonGroups.length > 0 ? addonGroups : undefined,
+          visibility: p.visibility,
         };
       }),
     [effectiveProducts],
@@ -279,8 +373,16 @@ const POSPage = () => {
     // phone-channel orders surface in the POS workflow indistinguishably from in-store.
     source: o.channel === "website" ? "website" : "pos",
     customerName: o.customerName ?? "Walk-in",
-    items: o.items.map((i) => ({ name: i.name, quantity: i.quantity, price: Number(i.unitPrice) })),
+    items: o.items.map((i) => ({
+      name: i.name,
+      quantity: i.quantity,
+      price: Number(i.unitPrice),
+      variation: i.variation,
+      addons: i.addons,
+      notes: i.notes,
+    })),
     total: Number(o.total),
+    notes: o.notes,
     time: new Date(o.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     startTime: new Date(o.createdAt),
     estimatedMinutes: 15,
@@ -308,6 +410,22 @@ const POSPage = () => {
   const updateOrderStatusMutation = useUpdateOrderStatus();
   const cancelOrderMutation = useCancelOrder();
   const [autoAccept, setAutoAccept] = useState(false);
+  // Auto-accept: when enabled, freshly INITIATED orders (any channel) are
+  // accepted (→ PENDING) without a cashier tapping "Accept". The ref guards
+  // against re-firing for the same order across the 5s poll window.
+  const autoAcceptedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!autoAccept) return;
+    for (const o of ordersPage?.data ?? []) {
+      if (o.status === "initiated" && !autoAcceptedRef.current.has(o.id)) {
+        autoAcceptedRef.current.add(o.id);
+        updateOrderStatusMutation.mutate(
+          { id: o.id, status: "pending" },
+          { onError: () => autoAcceptedRef.current.delete(o.id) },
+        );
+      }
+    }
+  }, [autoAccept, ordersPage, updateOrderStatusMutation]);
 
   // Register (cash session) gating — a counter must have an open register
   // before taking bookings.
@@ -315,6 +433,20 @@ const POSPage = () => {
   const openRegisterMutation = useOpenCashSession();
   const closeRegisterMutation = useCloseCashSession();
   const [registerForm, setRegisterForm] = useState({ counterName: "", cashAtHand: "" });
+  // When no personal register is open, offer to join a colleague's open
+  // register on this store instead of forcing a new one open.
+  const registerGateOpen = posMode === "counter" && !registerLoading && !activeRegister;
+  const { data: joinableRegisters = [] } = useStoreActiveCashSessions(registerGateOpen);
+  const joinRegisterMutation = useJoinCashSession();
+
+  const handleJoinRegister = (id: string) => {
+    joinRegisterMutation.mutate(id, {
+      onSuccess: () =>
+        setToast({ open: true, type: "success", title: "Joined register" }),
+      onError: (e: Error) =>
+        setToast({ open: true, type: "error", title: e.message ?? "Failed to join register" }),
+    });
+  };
 
   const handleOpenRegister = () => {
     const cash = Number(registerForm.cashAtHand);
@@ -395,12 +527,46 @@ const POSPage = () => {
   const currentStaffId = sessionStaff?.id ?? "";
   const isManager = !!sessionStaff?.permissions?.includes("manage_orders");
 
+  // Payment options come from the merchant's enabled methods for this channel
+  // (Counter POS = `pos`, Self-Service = `self`), not a hardcoded Cash/Card pair.
+  const { data: enabledPaymentMethods = [] } = useEnabledPaymentMethods(
+    posMode === "selfservice" ? "self" : "pos",
+  );
+
   const playBeep = useBeepSound();
 
   // External-order push notifications wire in once webhook delivery is real (Phase 4+).
 
 
-  const filteredItems = menuItems.filter((item) => {
+  // Channel enablement: Counter POS shows products enabled for the storefront
+  // (or pos/omni); Self-Service shows products enabled for self-order (or omni).
+  // An empty/absent visibility list means "all channels" (backwards compatible).
+  const isVisibleOnChannel = useCallback(
+    (vis?: string[] | null) => {
+      if (!vis || vis.length === 0) return true;
+      if (vis.includes("omni")) return true;
+      return posMode === "selfservice"
+        ? vis.includes("self")
+        : vis.includes("pos") || vis.includes("storefront");
+    },
+    [posMode],
+  );
+
+  const channelItems = useMemo(
+    () => menuItems.filter((i) => isVisibleOnChannel(i.visibility)),
+    [menuItems, isVisibleOnChannel],
+  );
+
+  // Only surface category pills that actually have a visible product, so every
+  // populated category shows (fixing "missing categories") without empty pills.
+  const visibleCategories = useMemo(() => {
+    const withProducts = new Set(
+      channelItems.map((i) => i.categoryId).filter((id): id is string => !!id),
+    );
+    return menuCategories.filter((c) => withProducts.has(c.id));
+  }, [channelItems, menuCategories]);
+
+  const filteredItems = channelItems.filter((item) => {
     const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           item.description?.toLowerCase().includes(searchQuery.toLowerCase());
     // When searching, show items across all categories; otherwise show all
@@ -453,6 +619,10 @@ const POSPage = () => {
   const submitOrder = async (
     isDelivery: boolean,
     extraNotes?: string,
+    // "quick" skips the kitchen (READY), "process" is cashier-accepted on
+    // create (PENDING), "standard" leaves the order INITIATED so it goes
+    // through the normal Accept flow (e.g. self-service orders).
+    billType: "quick" | "process" | "standard" = "standard",
   ): Promise<{ order: Awaited<ReturnType<typeof createOrderMutation.mutateAsync>>; display: IncomingOrder } | null> => {
     if (cart.length === 0) return null;
     try {
@@ -464,12 +634,19 @@ const POSPage = () => {
         notes: extraNotes,
         taxAmount: tax,
         discountAmount: discount,
-        items: cart.map((c) => ({
-          productId: c.menuItemId,
-          name: c.variationText ? `${c.name} (${c.variationText})` : c.name,
-          quantity: c.quantity,
-          unitPrice: c.price,
-        })),
+        quickBill: billType === "quick" || undefined,
+        accept: billType === "process" || undefined,
+        items: cart.map((c) => {
+          const { variation, addons } = splitSelectedVariations(c.variations);
+          return {
+            productId: c.menuItemId,
+            name: c.name,
+            quantity: c.quantity,
+            unitPrice: c.price,
+            variation,
+            addons,
+          };
+        }),
       });
       const display: IncomingOrder = {
         id: `#${order.orderNumber}`,
@@ -487,7 +664,7 @@ const POSPage = () => {
         status: "pending",
         tableNumber: order.tableNumber ?? undefined,
         orderType: isDelivery ? "delivery" : order.tableNumber ? "dine-in" : "takeaway",
-        billType: "process",
+        billType: billType === "quick" ? "quick" : "process",
       };
       return { order, display };
     } catch (err) {
@@ -508,7 +685,7 @@ const POSPage = () => {
       title: "Quick Bill",
       description: "Submit this order. Continue?",
       action: async () => {
-        const result = await submitOrder(orderType === "delivery");
+        const result = await submitOrder(orderType === "delivery", undefined, "quick");
         if (result) {
           setCurrentReceipt(result.display);
           setShowReceiptModal(true);
@@ -528,7 +705,7 @@ const POSPage = () => {
       title: "Process Bill",
       description: "Send the order to the kitchen?",
       action: async () => {
-        const result = await submitOrder(orderType === "delivery");
+        const result = await submitOrder(orderType === "delivery", undefined, "process");
         if (result) {
           setCurrentReceipt(result.display);
           setShowReceiptModal(true);
@@ -638,6 +815,52 @@ const POSPage = () => {
     }
   };
 
+  /**
+   * Counter payment: create the order then record the tender against the
+   * chosen merchant payment method. Recording the payment is what writes the
+   * financial-ledger transaction and marks the order paid (fixing both
+   * "transactions don't record" and "paid amount shows 0").
+   */
+  const handleTakePayment = (method: WorkstationPaymentMethod) => {
+    if (cart.length === 0) return;
+    setConfirmDialog({
+      open: true,
+      title: `Take Payment — ${method.label}`,
+      description: `Record ₦${Math.round(total).toLocaleString()} paid via ${method.label}?`,
+      action: async () => {
+        // Cashier-created + immediately paid ⇒ accepted on create.
+        const result = await submitOrder(orderType === "delivery", undefined, "process");
+        if (!result) return;
+        try {
+          await recordPaymentMutation.mutateAsync({
+            id: result.order.id,
+            amount: Number(result.order.total),
+            paymentChannel: paymentChannelForType(method.type),
+            paymentMethodId: method.id,
+          });
+          setCurrentReceipt(result.display);
+          setShowReceiptModal(true);
+          setToast({
+            open: true,
+            type: "success",
+            title: "Payment recorded",
+            message: `${result.display.id} paid via ${method.label}.`,
+          });
+          setCart([]);
+          setDiscount(0);
+          setCustomerName("");
+        } catch (err) {
+          setToast({
+            open: true,
+            type: "error",
+            title: "Payment failed",
+            message: (err as Error).message,
+          });
+        }
+      },
+    });
+  };
+
   const holdOrder = () => {
     if (cart.length === 0) return;
     const held: HeldOrder = {
@@ -726,8 +949,8 @@ const POSPage = () => {
       // Number keys 1-8 for category selection
       if (!e.ctrlKey && !e.metaKey && !e.altKey && /^[1-8]$/.test(e.key)) {
         const categoryIndex = parseInt(e.key) - 1;
-        if (menuCategories[categoryIndex]) {
-          setSelectedCategory(menuCategories[categoryIndex].id);
+        if (visibleCategories[categoryIndex]) {
+          setSelectedCategory(visibleCategories[categoryIndex].id);
         }
         return;
       }
@@ -790,6 +1013,16 @@ const POSPage = () => {
   };
 
   const activeOrders = incomingOrders.filter((o) => !["hold"].includes(o.status));
+
+  // Merchant-configured role restriction for the current POS mode (the
+  // effect above already swapped to Self-Service when that one is allowed).
+  if (posMode === "counter" ? !counterAllowed : !selfAllowed) {
+    return (
+      <FunctionRestricted
+        label={posMode === "counter" ? "Counter POS" : "Self-Service"}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col lg:flex-row">
@@ -941,7 +1174,7 @@ const POSPage = () => {
                     >
                       <span>All</span>
                     </button>
-                    {menuCategories.map((cat) => (
+                    {visibleCategories.map((cat) => (
                       <button
                         key={cat.id}
                         onClick={() => setSelectedCategory(cat.id)}
@@ -1077,13 +1310,34 @@ const POSPage = () => {
                     <p className="text-sm text-muted-foreground mb-3">{order.customerName} • {order.time}</p>
 
                     <div className="space-y-1 mb-4">
-                      {order.items.map((item, idx) => (
-                        <div key={idx} className="flex items-center justify-between text-sm">
-                          <span className="text-foreground">{item.quantity}x {item.name}</span>
-                          <span className="text-muted-foreground">₦{(item.price * item.quantity).toLocaleString()}</span>
-                        </div>
-                      ))}
+                      {order.items.map((item, idx) => {
+                        const variation = variationLabel(item.variation);
+                        const addons = addonsLabel(item.addons);
+                        return (
+                          <div key={idx} className="text-sm">
+                            <div className="flex items-center justify-between">
+                              <span className="text-foreground">{item.quantity}x {item.name}</span>
+                              <span className="text-muted-foreground">₦{(item.price * item.quantity).toLocaleString()}</span>
+                            </div>
+                            {variation && (
+                              <p className="text-xs text-muted-foreground pl-5">{variation}</p>
+                            )}
+                            {addons && (
+                              <p className="text-xs text-muted-foreground pl-5">+ {addons}</p>
+                            )}
+                            {item.notes && (
+                              <p className="text-xs text-muted-foreground pl-5 italic">“{item.notes}”</p>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
+
+                    {order.notes && (
+                      <p className="text-xs text-muted-foreground mb-4 -mt-2 bg-muted/50 rounded-lg p-2">
+                        <span className="font-medium text-foreground">Note:</span> {order.notes}
+                      </p>
+                    )}
 
                     <div className="flex items-center justify-between pt-4 border-t border-border">
                       <span className="font-bold text-foreground">₦{order.total.toLocaleString()}</span>
@@ -1274,18 +1528,33 @@ const POSPage = () => {
                   Process Bill
                 </Button>
               </div>
-              <div className="grid grid-cols-3 gap-2">
-                <Button variant="outline" className="h-11 rounded-xl" disabled={cart.length === 0} onClick={holdOrder}>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" className="h-11 rounded-xl px-3 flex-shrink-0" disabled={cart.length === 0} onClick={holdOrder} title="Hold order">
                   <Pause className="w-4 h-4" />
                 </Button>
-                <Button variant="outline" className="h-11 rounded-xl" disabled={cart.length === 0}>
-                  <Banknote className="w-4 h-4 mr-1" />
-                  Cash
-                </Button>
-                <Button className="h-11 rounded-xl" disabled={cart.length === 0}>
-                  <CreditCard className="w-4 h-4 mr-1" />
-                  Card
-                </Button>
+                {enabledPaymentMethods.length === 0 ? (
+                  <Button
+                    variant="outline"
+                    className="h-11 rounded-xl flex-1 text-xs text-muted-foreground"
+                    disabled
+                    title="Add payment methods in the merchant dashboard → Settings → Payment Methods"
+                  >
+                    No payment methods
+                  </Button>
+                ) : (
+                  enabledPaymentMethods.map((m) => (
+                    <Button
+                      key={m.id}
+                      variant="outline"
+                      className="h-11 rounded-xl flex-1 min-w-0"
+                      disabled={cart.length === 0 || recordPaymentMutation.isPending}
+                      onClick={() => handleTakePayment(m)}
+                    >
+                      {paymentIcon(m.type)}
+                      <span className="truncate ml-1">{m.label}</span>
+                    </Button>
+                  ))
+                )}
               </div>
             </>
           )}
@@ -1367,12 +1636,35 @@ const POSPage = () => {
       {/* Modals */}
       <ItemVariationModal item={selectedItem} onClose={() => setSelectedItem(null)} onAddToCart={addToCart} />
       {/* Open Register gate — shown for counter mode when no register is open */}
-      <Dialog open={posMode === "counter" && !registerLoading && !activeRegister}>
+      <Dialog open={registerGateOpen}>
         <DialogContent className="sm:max-w-sm" onPointerDownOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle>Open Register</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
+            {joinableRegisters.length > 0 && (
+              <div className="space-y-2">
+                <Label>Join an open register</Label>
+                <div className="space-y-2">
+                  {joinableRegisters.map((reg) => (
+                    <Button
+                      key={reg.id}
+                      variant="outline"
+                      className="w-full justify-between rounded-xl"
+                      onClick={() => handleJoinRegister(reg.id)}
+                      disabled={joinRegisterMutation.isPending}
+                    >
+                      <span className="truncate">{reg.counterName ?? "Register"}</span>
+                      <span className="text-xs text-muted-foreground">{reg.staffName}</span>
+                    </Button>
+                  ))}
+                </div>
+                <div className="relative py-1">
+                  <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
+                  <div className="relative flex justify-center"><span className="bg-background px-2 text-xs text-muted-foreground">or open a new one</span></div>
+                </div>
+              </div>
+            )}
             <div className="space-y-2">
               <Label>Counter Name</Label>
               <Input

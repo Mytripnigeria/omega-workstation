@@ -7,6 +7,7 @@ import ThemeToggle from "@/components/ThemeToggle";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { staffAuthService, type StaffLookupResult } from "@/services/auth";
+import { getCurrentCoords } from "@/lib/geolocation";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -44,11 +45,24 @@ const Login = () => {
     if (pin.length !== 4) return;
     setIsLoading(true);
     try {
-      const staff = await staffAuthService.login(staffId.toUpperCase(), pin);
+      // Best-effort device coords for geofenced login (ignored unless the
+      // merchant enabled geofencing).
+      const coords = await getCurrentCoords();
+      const staff = await staffAuthService.login(
+        staffId.toUpperCase(),
+        pin,
+        coords ?? undefined,
+      );
       toast.success(`Welcome, ${staff.firstName}!`);
       navigate("/dashboard");
-    } catch {
-      toast.error("Invalid PIN. Please try again.");
+    } catch (e) {
+      // Surface a geofence/location error verbatim; otherwise it's a bad PIN.
+      const msg = (e as Error)?.message;
+      toast.error(
+        msg && !/credential/i.test(msg)
+          ? msg
+          : "Invalid PIN. Please try again.",
+      );
       setPin("");
     } finally {
       setIsLoading(false);
@@ -120,7 +134,7 @@ const Login = () => {
                   Enter PIN
                 </h2>
                 <p className="text-muted-foreground text-sm mt-1">
-                  Signing in as <span className="text-foreground font-medium">{foundStaff?.name}</span>
+                  Signing in as <span className="text-foreground font-medium">{foundStaff ? `${foundStaff.firstName} ${foundStaff.lastName}`.trim() : ""}</span>
                 </p>
               </div>
               

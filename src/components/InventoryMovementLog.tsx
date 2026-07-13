@@ -182,13 +182,18 @@ const InventoryMovementLog = ({ ingredientId }: InventoryMovementLogProps) => {
       label: "Details",
       render: (m: IngredientMovement) => (
         <div className="text-sm text-muted-foreground max-w-[200px]">
-          {m.referenceType && m.referenceId && (
+          {(m.fromLocationName || m.toLocationName) && (
+            <span className="block text-foreground">
+              {m.fromLocationName ?? "—"} → {m.toLocationName ?? "—"}
+            </span>
+          )}
+          {m.referenceType && m.referenceId && !m.fromLocationName && !m.toLocationName && (
             <span>
               {m.referenceType} {m.referenceId.slice(0, 8)}
             </span>
           )}
           {m.reason && <span className="line-clamp-1">{m.reason}</span>}
-          {!m.referenceType && !m.reason && "—"}
+          {!m.referenceType && !m.reason && !m.fromLocationName && !m.toLocationName && "—"}
         </div>
       ),
     },

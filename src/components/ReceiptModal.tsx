@@ -176,7 +176,7 @@ const ReceiptModal = ({
                 <span className="text-foreground">{customerName}</span>
               </div>
             )}
-            {staffName && (
+            {staffName && info?.showServerName !== false && (
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Served by:</span>
                 <span className="text-foreground">{staffName}</span>

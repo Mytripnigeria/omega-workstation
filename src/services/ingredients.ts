@@ -35,10 +35,16 @@ export const ingredientsService = {
      * to INTAKE on positive or CORRECTION on negative.
      */
     type?: 'intake' | 'consumption' | 'waste' | 'transfer' | 'correction',
+    /**
+     * Target location for this adjustment. Required by the backend when the
+     * ingredient is stocked at more than one location (so Add Stock lands in
+     * the chosen Out-Store/In-Store location, not the aggregate).
+     */
+    locationId?: string,
   ): Promise<Ingredient> =>
     workstationApi.request<Ingredient>(`/ingredients/${id}/adjust-stock`, {
       method: 'POST',
-      body: JSON.stringify({ adjustment, reason, expiryDate, type }),
+      body: JSON.stringify({ adjustment, reason, expiryDate, type, locationId }),
     }),
 
   /**

@@ -16,13 +16,17 @@ export const staffAuthService = {
     });
   },
 
-  async login(staffCode: string, pin: string): Promise<WorkstationStaff> {
+  async login(
+    staffCode: string,
+    pin: string,
+    coords?: { latitude: number; longitude: number },
+  ): Promise<WorkstationStaff> {
     const result = await workstationApi.request<{
       accessToken: string;
       staff: WorkstationStaff;
     }>('/auth/staff/login', {
       method: 'POST',
-      body: JSON.stringify({ staffCode, pin }),
+      body: JSON.stringify({ staffCode, pin, ...(coords ?? {}) }),
     });
 
     workstationAuth.setSession(result.accessToken, result.staff);

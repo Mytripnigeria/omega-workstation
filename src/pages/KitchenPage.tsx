@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Clock, CheckCircle2, AlertCircle, ChefHat, GripVertical, RotateCcw, MessageSquare, AlertTriangle, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,9 @@ import CustomerInstructionsModal from "@/components/CustomerInstructionsModal";
 import ActivityLogButton from "@/components/ActivityLogButton";
 import ActivityLog from "@/components/ActivityLog";
 import { useOrders, useUpdateItemPrep, useUpdateOrderStatus } from "@/hooks/useOrders";
+import { useFunctionAccess } from "@/hooks/useFunctionAccess";
+import { canAccessFunction } from "@/lib/roles";
+import FunctionRestricted from "@/components/FunctionRestricted";
 import { workstationAuth } from "@/services/api";
 import type { Order as ApiOrder, OrderStatus as ApiOrderStatus } from "@/types/order";
 
@@ -15,6 +18,20 @@ import type { Order as ApiOrder, OrderStatus as ApiOrderStatus } from "@/types/o
 // payload does not yet carry a per-order prep time, so the board uses a single
 // default to drive the original countdown design.
 const DEFAULT_PREP_MINUTES = 15;
+
+// New orders left un-started this long count as late (red treatment + beep).
+const PENDING_LATE_SECONDS = 5 * 60;
+
+function variationLabel(variation?: Record<string, unknown> | null): string | null {
+  if (!variation) return null;
+  const name = (variation as { name?: unknown }).name;
+  return typeof name === "string" && name.trim() ? name : null;
+}
+function addonsLabel(addons?: Record<string, unknown>[] | null): string | null {
+  if (!addons || addons.length === 0) return null;
+  const names = addons.map((a) => (a as { name?: unknown }).name).filter((n): n is string => typeof n === "string" && n.trim().length > 0);
+  return names.length ? names.join(", ") : null;
+}
 
 type KitchenStatus = "new" | "preparing" | "ready" | "completed" | "delayed";
 
@@ -24,6 +41,8 @@ interface KitchenOrderItem {
   quantity: number;
   notes?: string;
   completed: boolean;
+  variation?: Record<string, unknown> | null;
+  addons?: Record<string, unknown>[] | null;
 }
 
 interface KitchenOrder {
@@ -31,8 +50,11 @@ interface KitchenOrder {
   displayId: string;     // "#26678"
   tableNumber: string;
   items: KitchenOrderItem[];
-  startTime: Date;
+  startTime: Date;       // countdown anchor: when prep began (else order creation)
+  createdAt: Date;       // when the order was placed — drives the pending count-up
   estimatedMinutes: number;
+  /** Whether the order has entered PREPARING — the countdown only ticks then. */
+  prepStarted: boolean;
   status: KitchenStatus;
   priority: boolean;
   preparingStaffId?: string;
@@ -60,19 +82,34 @@ function toKitchenOrder(o: ApiOrder): KitchenOrder {
       quantity: i.quantity,
       notes: i.notes ?? undefined,
       completed: i.prepStatus === "ready",
+      variation: i.variation,
+      addons: i.addons,
     })),
-    startTime: new Date(o.createdAt),
-    estimatedMinutes: DEFAULT_PREP_MINUTES,
+    // Anchor the countdown to when prep started; fall back to creation only so
+    // the field is always a Date (the countdown stays full until prepStarted).
+    startTime: new Date(o.preparingStartedAt ?? o.createdAt),
+    createdAt: new Date(o.createdAt),
+    estimatedMinutes: o.estimatedPrepMinutes ?? DEFAULT_PREP_MINUTES,
+    prepStarted: !!o.preparingStartedAt,
     status,
     priority: false,
-    preparingStaffId: o.staffId ?? undefined,
-    preparingStaffName: o.staffName ?? undefined,
+    // Prefer the staff who actually started prep; fall back to the order creator
+    // until the backend exposes preparingStaffId/Name.
+    preparingStaffId: o.preparingStaffId ?? o.staffId ?? undefined,
+    preparingStaffName: o.preparingStaffName ?? o.staffName ?? undefined,
     customerInstructions: o.notes ?? undefined,
   };
 }
 
 const KitchenPage = () => {
   const navigate = useNavigate();
+
+  // Merchant-configured role restriction (workstation settings).
+  const { data: functionAccess } = useFunctionAccess();
+  const kitchenAllowed = canAccessFunction(
+    functionAccess?.functionRoleAccess,
+    "kitchen",
+  );
 
   const sessionStaff = workstationAuth.getStaff();
   const currentStaffId = sessionStaff?.id ?? "";
@@ -108,10 +145,47 @@ const KitchenPage = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // Late-order beep. Browsers block audio until a user gesture, so the
+  // AudioContext is created/resumed lazily on the first interaction and every
+  // audio call fails silently if the browser refuses.
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
+  useEffect(() => {
+    const unlock = () => {
+      try {
+        if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+        if (audioCtxRef.current.state === "suspended") void audioCtxRef.current.resume();
+      } catch {
+        // Audio unavailable — the beep is best-effort only.
+      }
+      document.removeEventListener("click", unlock);
+      document.removeEventListener("keydown", unlock);
+    };
+    document.addEventListener("click", unlock);
+    document.addEventListener("keydown", unlock);
+    return () => {
+      document.removeEventListener("click", unlock);
+      document.removeEventListener("keydown", unlock);
+      audioCtxRef.current?.close().catch(() => {});
+      audioCtxRef.current = null;
+    };
+  }, []);
+
   const getRemainingSeconds = (order: KitchenOrder) => {
+    // Until prep actually begins, show the full estimated time (not ticking).
+    if (!order.prepStarted) return order.estimatedMinutes * 60;
     const elapsed = Math.floor((Date.now() - order.startTime.getTime()) / 1000);
     return order.estimatedMinutes * 60 - elapsed;
   };
+
+  // How long a new order has been waiting for someone to start prep (counts up).
+  const getPendingSeconds = (order: KitchenOrder) =>
+    Math.floor((Date.now() - order.createdAt.getTime()) / 1000);
+
+  const isOrderLate = (order: KitchenOrder) =>
+    order.status === "preparing"
+      ? getRemainingSeconds(order) < 0
+      : order.status === "new" && getPendingSeconds(order) > PENDING_LATE_SECONDS;
 
   const formatCountdown = (seconds: number) => {
     const isNegative = seconds < 0;
@@ -171,8 +245,8 @@ const KitchenPage = () => {
     return order.preparingStaffId === currentStaffId ? "Myself" : order.preparingStaffName;
   };
 
-  const getStatusBorderColor = (status: KitchenStatus, remaining: number) => {
-    if (remaining < 0 && status === "preparing") return "border-l-destructive";
+  const getStatusBorderColor = (status: KitchenStatus, late: boolean) => {
+    if (late) return "border-l-destructive";
     switch (status) {
       case "new": return "border-l-status-warning";
       case "preparing": return "border-l-status-process";
@@ -182,19 +256,55 @@ const KitchenPage = () => {
     }
   };
 
-  const newOrders = orders.filter((o) => o.status === "new");
-  const preparingOrders = orders.filter((o) => o.status === "preparing");
+  // Backend returns newest-first; the board wants oldest first (New) and
+  // most-late first (Preparing/Delayed — ascending remaining time).
+  const newOrders = orders
+    .filter((o) => o.status === "new")
+    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  const preparingOrders = orders
+    .filter((o) => o.status === "preparing")
+    .sort((a, b) => getRemainingSeconds(a) - getRemainingSeconds(b));
   const delayedOrders = preparingOrders.filter((o) => getRemainingSeconds(o) < 0);
   const onTimeOrders = preparingOrders.filter((o) => getRemainingSeconds(o) >= 0);
   const readyOrders = orders.filter((o) => o.status === "ready");
 
+  // Repeat a short beep while any order is late (prep overdue or pending too long).
+  const anyLate = orders.some(isOrderLate);
+
+  useEffect(() => {
+    if (!anyLate) return;
+    const beep = () => {
+      const ctx = audioCtxRef.current;
+      if (!ctx || ctx.state !== "running") return;
+      try {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.value = 880;
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.3);
+      } catch {
+        // Fail silently — the board must keep working without sound.
+      }
+    };
+    beep();
+    const interval = setInterval(beep, 5000);
+    return () => clearInterval(interval);
+  }, [anyLate]);
+
   const OrderCard = ({ order, showActions = true }: { order: KitchenOrder; showActions?: boolean }) => {
     const remaining = getRemainingSeconds(order);
-    const isDelayed = remaining < 0 && order.status === "preparing";
+    const isDelayed = isOrderLate(order);
+    // New orders count UP how long they've been waiting; preparing counts down.
+    const timerSeconds = order.status === "new" ? getPendingSeconds(order) : remaining;
     const items = orderedItems(order);
 
     return (
-      <div className={`bg-card border border-border rounded-2xl p-4 border-l-4 ${getStatusBorderColor(order.status, remaining)}`}>
+      <div className={`bg-card border border-border rounded-2xl p-4 border-l-4 ${getStatusBorderColor(order.status, isDelayed)}`}>
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <Badge variant="secondary" className="rounded-lg font-semibold">Table {order.tableNumber}</Badge>
@@ -219,7 +329,7 @@ const KitchenPage = () => {
         {(order.status === "preparing" || order.status === "new") && (
           <div className={`flex items-center gap-2 mb-3 p-3 rounded-xl ${isDelayed ? "bg-destructive/10" : "bg-muted"}`}>
             {isDelayed ? <AlertTriangle className="w-4 h-4 text-destructive" /> : <Clock className="w-4 h-4 text-muted-foreground" />}
-            <span className={`font-mono font-bold ${isDelayed ? "text-destructive" : "text-foreground"}`}>{formatCountdown(remaining)}</span>
+            <span className={`font-mono font-bold ${isDelayed ? "text-destructive" : "text-foreground"}`}>{formatCountdown(timerSeconds)}</span>
             {isDelayed && <Badge className="bg-destructive text-destructive-foreground text-xs rounded-lg">DELAYED</Badge>}
           </div>
         )}
@@ -251,11 +361,23 @@ const KitchenPage = () => {
                   </button>
                 </>
               )}
-              <div className="flex-1 min-w-0">
+              <div
+                className={`flex-1 min-w-0 ${order.status === "preparing" ? "cursor-pointer" : ""}`}
+                onClick={() => {
+                  // Tapping the item text ticks it, same as the checkbox.
+                  if (order.status === "preparing") toggleItemComplete(order, item.id);
+                }}
+              >
                 <div className="flex items-center justify-between gap-2">
                   <span className={`text-foreground font-medium ${item.completed ? "line-through" : ""}`}>{item.name}</span>
                   <span className="text-muted-foreground flex-shrink-0">×{item.quantity}</span>
                 </div>
+                {variationLabel(item.variation) && (
+                  <p className="text-xs text-muted-foreground mt-1">{variationLabel(item.variation)}</p>
+                )}
+                {addonsLabel(item.addons) && (
+                  <p className="text-xs text-muted-foreground mt-1">+ {addonsLabel(item.addons)}</p>
+                )}
                 {item.notes && <p className="text-xs text-status-warning mt-1">Note: {item.notes}</p>}
               </div>
             </div>
@@ -287,6 +409,10 @@ const KitchenPage = () => {
       </div>
     );
   };
+
+  if (!kitchenAllowed) {
+    return <FunctionRestricted label="Kitchen" />;
+  }
 
   return (
     <div className="min-h-screen bg-background">

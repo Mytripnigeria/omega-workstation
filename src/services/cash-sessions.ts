@@ -41,6 +41,15 @@ export const cashSessionsService = {
   myActive: (): Promise<CashSession | null> =>
     workstationApi.request<CashSession | null>("/cash-sessions/me/active"),
 
+  /** Open registers on my store I can join (excludes ones I already belong to). */
+  storeActive: (): Promise<CashSession[]> =>
+    workstationApi.request<CashSession[]>("/cash-sessions/store-active"),
+
+  join: (id: string): Promise<CashSession> =>
+    workstationApi.request<CashSession>(`/cash-sessions/${id}/join`, {
+      method: "POST",
+    }),
+
   open: (input: OpenCashSessionInput): Promise<CashSession> =>
     workstationApi.request<CashSession>("/cash-sessions/open", {
       method: "POST",
