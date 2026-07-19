@@ -110,6 +110,15 @@ const OutstorePage = () => {
   );
   const locations = locPage?.data ?? [];
 
+  // Every store location regardless of type — transfers can send stock to any
+  // location (e.g. Out-Store service → another Out-Store point), and the
+  // backend auto-creates the destination stock row if the item isn't there.
+  const { data: allLocPage } = useInventoryLocations(
+    { storeId: staff?.storeId, limit: 100 },
+    { enabled: allowed },
+  );
+  const allLocations = allLocPage?.data ?? [];
+
   const { data: page, isLoading } = useIngredients(
     {
       storeId: staff?.storeId,
@@ -139,7 +148,13 @@ const OutstorePage = () => {
   });
   const itemLocations = transferLocsQuery.data ?? [];
   const locationName = (id: string) =>
-    locations.find((l) => l.id === id)?.name ?? id;
+    allLocations.find((l) => l.id === id)?.name ??
+    locations.find((l) => l.id === id)?.name ??
+    id;
+  const itemStockAt = (locId: string) =>
+    Number(
+      itemLocations.find((l) => l.locationId === locId)?.currentStock ?? 0,
+    );
 
   // When a specific location is selected, show that location's stock (the
   // quantity tagged to that location) rather than the aggregate. The Out-Store
@@ -597,18 +612,18 @@ const OutstorePage = () => {
                   <SelectValue placeholder="Destination location" />
                 </SelectTrigger>
                 <SelectContent>
-                  {itemLocations
-                    .filter((l) => l.locationId !== transferFromLoc)
+                  {allLocations
+                    .filter((l) => l.id !== transferFromLoc)
                     .map((l) => (
-                      <SelectItem key={l.locationId} value={l.locationId}>
-                        {locationName(l.locationId)} ({Number(l.currentStock)})
+                      <SelectItem key={l.id} value={l.id}>
+                        {l.name} ({itemStockAt(l.id)})
                       </SelectItem>
                     ))}
                 </SelectContent>
               </Select>
-              {itemLocations.length < 2 && (
+              {itemLocations.length === 0 && (
                 <p className="text-xs text-muted-foreground mt-1">
-                  Item must be stocked in at least two locations to transfer.
+                  Item has no stocked location to transfer from.
                 </p>
               )}
             </div>

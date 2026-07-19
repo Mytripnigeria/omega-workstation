@@ -61,7 +61,7 @@ import ActivityLog from "@/components/ActivityLog";
 import ActivityLogButton from "@/components/ActivityLogButton";
 import KeyboardShortcutsModal from "@/components/KeyboardShortcutsModal";
 import StaffFinancePanel from "@/components/StaffFinancePanel";
-import { useBeepSound } from "@/hooks/useBeepSound";
+import { useBeepSound, unlockAudio } from "@/hooks/useBeepSound";
 import { useCategories } from "@/hooks/useCategories";
 import { useProducts } from "@/hooks/useProducts";
 import { useCancelOrder, useCreateOrder, useOrders, useRecordPayment, useUpdateOrderStatus } from "@/hooks/useOrders";
@@ -292,9 +292,30 @@ const POSPage = () => {
   // variants each with their own sellingPrice; the POS expects a single
   // VariationGroup whose options carry a `priceModifier` relative to the
   // base, so we compute `priceModifier = variant.sellingPrice − basePrice`.
+  // A product's categoryId can go stale (category soft-deleted + re-created),
+  // which hid its category pill while the item still showed under "All" — so
+  // resolve an effective category: the stored id when it matches a loaded
+  // category, otherwise a case-insensitive name match via categoryName.
+  const categoryIdSet = useMemo(
+    () => new Set(menuCategories.map((c) => c.id)),
+    [menuCategories],
+  );
+  const categoryIdByName = useMemo(
+    () =>
+      new Map(
+        menuCategories.map((c) => [c.name.trim().toLowerCase(), c.id]),
+      ),
+    [menuCategories],
+  );
   const menuItems: MenuItem[] = useMemo(
     () =>
       effectiveProducts.map((p) => {
+        const effectiveCategoryId =
+          p.categoryId && categoryIdSet.has(p.categoryId)
+            ? p.categoryId
+            : (p.categoryName &&
+                categoryIdByName.get(p.categoryName.trim().toLowerCase())) ||
+              p.categoryId;
         const basePrice = Number(p.sellingPrice);
         const variations =
           p.variations && p.variations.length > 0
@@ -329,7 +350,7 @@ const POSPage = () => {
           id: p.id,
           name: p.name,
           price: basePrice,
-          categoryId: p.categoryId,
+          categoryId: effectiveCategoryId,
           image: p.imageUrl ?? undefined,
           description: p.description ?? undefined,
           variations,
@@ -337,7 +358,7 @@ const POSPage = () => {
           visibility: p.visibility,
         };
       }),
-    [effectiveProducts],
+    [effectiveProducts, categoryIdSet, categoryIdByName],
   );
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -535,7 +556,52 @@ const POSPage = () => {
 
   const playBeep = useBeepSound();
 
-  // External-order push notifications wire in once webhook delivery is real (Phase 4+).
+  // Browsers keep WebAudio suspended until a user gesture — unlock the shared
+  // AudioContext on the first tap/keypress so poll-triggered notification
+  // tones are audible.
+  useEffect(() => {
+    const unlock = () => unlockAudio();
+    window.addEventListener("pointerdown", unlock, { once: true });
+    window.addEventListener("keydown", unlock, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, []);
+
+  // New-order alert: watch the 5s orders poll for external orders (website /
+  // self-service / phone — anything not booked at this counter) and raise the
+  // notification popup, which loops the alert tone until dismissed. The first
+  // poll after mount only seeds the seen-set so existing orders don't replay
+  // on every page load.
+  const seenOrderIdsRef = useRef<Set<string>>(new Set());
+  const seededOrdersRef = useRef(false);
+  useEffect(() => {
+    const rows = ordersPage?.data;
+    if (!rows) return;
+    if (!seededOrdersRef.current) {
+      seededOrdersRef.current = true;
+      for (const o of rows) seenOrderIdsRef.current.add(o.id);
+      return;
+    }
+    for (const o of rows) {
+      if (seenOrderIdsRef.current.has(o.id)) continue;
+      seenOrderIdsRef.current.add(o.id);
+      const isFresh = o.status === "initiated" || o.status === "pending";
+      if (!isFresh || o.channel === "pos") continue;
+      setOrderNotification((prev) =>
+        prev ?? {
+          id: o.id,
+          orderNumber: `#${o.orderNumber}`,
+          source: "website",
+          customerName: o.customerName ?? "Walk-in",
+          itemCount: o.items.reduce((sum, i) => sum + i.quantity, 0),
+          total: Number(o.total),
+          timestamp: new Date(o.createdAt),
+        },
+      );
+    }
+  }, [ordersPage]);
 
 
   // Channel enablement: Counter POS shows products enabled for the storefront
@@ -743,6 +809,11 @@ const POSPage = () => {
     if (cart.length === 0) return;
 
     setPayingWithPaystack(true);
+    // Close the payment dialog before the Paystack iframe opens — Radix's
+    // modal focus-trap/overlay otherwise sits above the iframe and swallows
+    // its input (the reported "freezes at popup"). Reopened on cancel/failure
+    // with the email/name state intact so the customer can retry.
+    setShowPaymentModal(false);
     try {
       const publicKey = await getPaystackPublicKey();
       const reference = newPaystackReference();
@@ -810,6 +881,9 @@ const POSPage = () => {
           message,
         });
       }
+      // Bring the payment dialog back so the customer can retry or edit
+      // their details after cancelling/failing the Paystack popup.
+      setShowPaymentModal(true);
     } finally {
       setPayingWithPaystack(false);
     }

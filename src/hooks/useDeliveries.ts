@@ -28,6 +28,14 @@ export function useCreateDelivery() {
   });
 }
 
+export function useDispatchDelivery() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deliveriesService.dispatch(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["deliveries"] }),
+  });
+}
+
 export function useAssignDelivery() {
   const qc = useQueryClient();
   return useMutation({

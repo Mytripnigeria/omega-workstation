@@ -16,7 +16,7 @@ import ToastNotification from "@/components/ToastNotification";
 import ActivityLogButton from "@/components/ActivityLogButton";
 import ActivityLog from "@/components/ActivityLog";
 import { useOrders, useUpdateOrderStatus } from "@/hooks/useOrders";
-import { useDeliveries } from "@/hooks/useDeliveries";
+import { useDeliveries, useDispatchDelivery } from "@/hooks/useDeliveries";
 import { useFunctionAccess } from "@/hooks/useFunctionAccess";
 import { canAccessFunction } from "@/lib/roles";
 import FunctionRestricted from "@/components/FunctionRestricted";
@@ -63,16 +63,20 @@ const WaiterPage = () => {
   );
 
   const updateStatus = useUpdateOrderStatus();
+  const dispatchDelivery = useDispatchDelivery();
 
-  // Delivery orders can only be sent out once a rider has accepted them —
-  // poll open deliveries and index rider assignment by orderId.
+  // The waiter sends a ready delivery order out ("Send for delivery"); only
+  // then does it appear on the rider board. Poll open deliveries and index
+  // them by orderId to know each order's dispatch state.
   const hasDeliveryOrders = orders.some((o) => o.isDelivery);
   const { data: deliveriesPage } = useDeliveries(
-    hasDeliveryOrders ? { status: "pending,assigned,in_transit", limit: 100 } : {},
+    hasDeliveryOrders
+      ? { status: "awaiting_dispatch,pending,assigned,in_transit", limit: 100 }
+      : {},
     hasDeliveryOrders ? 5000 : undefined,
   );
-  const riderAssignedByOrderId = new Map(
-    (deliveriesPage?.data ?? []).map((d) => [d.orderId, !!d.riderStaffId]),
+  const deliveryByOrderId = new Map(
+    (deliveriesPage?.data ?? []).map((d) => [d.orderId, d]),
   );
 
   // 1s tick so the "waiting" timers count up in real time.
@@ -95,24 +99,50 @@ const WaiterPage = () => {
     type === "dine-in" ? "Dine In" : type === "takeaway" ? "Takeaway" : "Delivery";
 
   const handleServe = (order: Order) => {
-    // Delivery orders go out for delivery; dine-in/takeaway complete immediately.
+    // Delivery orders are handed to the delivery board ("Send for delivery" —
+    // riders only see them after this); dine-in/takeaway complete immediately.
     const isDelivery = order.isDelivery;
-    const nextStatus = isDelivery ? "delivering" : "completed";
+    if (isDelivery) {
+      const delivery = deliveryByOrderId.get(order.id);
+      if (!delivery || delivery.status !== "awaiting_dispatch") return;
+      setConfirmDialog({
+        open: true,
+        title: "Send for delivery",
+        description: `Send order #${order.orderNumber} to the delivery board?`,
+        action: () => {
+          dispatchDelivery.mutate(delivery.id, {
+            onSuccess: () =>
+              setToast({
+                open: true,
+                type: "success",
+                title: "Sent for delivery",
+                message: `#${order.orderNumber} is now available to riders.`,
+              }),
+            onError: (e: Error) =>
+              setToast({
+                open: true,
+                type: "error",
+                title: "Couldn't send",
+                message: e.message,
+              }),
+          });
+        },
+      });
+      return;
+    }
     setConfirmDialog({
       open: true,
-      title: isDelivery ? "Send for delivery" : "Serve Order",
-      description: isDelivery
-        ? `Mark order #${order.orderNumber} as out for delivery?`
-        : `Mark order #${order.orderNumber} as served?`,
+      title: "Serve Order",
+      description: `Mark order #${order.orderNumber} as served?`,
       action: () => {
         updateStatus.mutate(
-          { id: order.id, status: nextStatus },
+          { id: order.id, status: "completed" },
           {
             onSuccess: () =>
               setToast({
                 open: true,
                 type: "success",
-                title: isDelivery ? "Out for delivery" : "Order served",
+                title: "Order served",
                 message: `#${order.orderNumber} updated.`,
               }),
             onError: (e: Error) =>
@@ -246,11 +276,14 @@ const WaiterPage = () => {
                   onClick={() => handleServe(order)}
                   disabled={
                     updateStatus.isPending ||
-                    (orderType === "delivery" && !riderAssignedByOrderId.get(order.id))
+                    dispatchDelivery.isPending ||
+                    (orderType === "delivery" &&
+                      deliveryByOrderId.get(order.id)?.status !== "awaiting_dispatch")
                   }
                 >
                   {orderType === "delivery"
-                    ? riderAssignedByOrderId.get(order.id)
+                    ? !deliveryByOrderId.get(order.id) ||
+                      deliveryByOrderId.get(order.id)?.status === "awaiting_dispatch"
                       ? "Send for delivery"
                       : "Waiting for rider"
                     : "Mark as served"}
