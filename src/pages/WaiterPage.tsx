@@ -79,17 +79,6 @@ const WaiterPage = () => {
     (deliveriesPage?.data ?? []).map((d) => [d.orderId, d]),
   );
 
-  // Delivery orders can only be sent out once a rider has accepted them —
-  // poll open deliveries and index rider assignment by orderId.
-  const hasDeliveryOrders = orders.some((o) => o.isDelivery);
-  const { data: deliveriesPage } = useDeliveries(
-    hasDeliveryOrders ? { status: "pending,assigned,in_transit", limit: 100 } : {},
-    hasDeliveryOrders ? 5000 : undefined,
-  );
-  const riderAssignedByOrderId = new Map(
-    (deliveriesPage?.data ?? []).map((d) => [d.orderId, !!d.riderStaffId]),
-  );
-
   // 1s tick so the "waiting" timers count up in real time.
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -287,11 +276,14 @@ const WaiterPage = () => {
                   onClick={() => handleServe(order)}
                   disabled={
                     updateStatus.isPending ||
-                    (orderType === "delivery" && !riderAssignedByOrderId.get(order.id))
+                    dispatchDelivery.isPending ||
+                    (orderType === "delivery" &&
+                      deliveryByOrderId.get(order.id)?.status !== "awaiting_dispatch")
                   }
                 >
                   {orderType === "delivery"
-                    ? riderAssignedByOrderId.get(order.id)
+                    ? !deliveryByOrderId.get(order.id) ||
+                      deliveryByOrderId.get(order.id)?.status === "awaiting_dispatch"
                       ? "Send for delivery"
                       : "Waiting for rider"
                     : "Mark as served"}

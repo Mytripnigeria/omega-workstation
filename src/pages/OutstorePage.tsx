@@ -110,6 +110,15 @@ const OutstorePage = () => {
   );
   const locations = locPage?.data ?? [];
 
+  // Every store location regardless of type — transfers can send stock to any
+  // location (e.g. Out-Store service → another Out-Store point), and the
+  // backend auto-creates the destination stock row if the item isn't there.
+  const { data: allLocPage } = useInventoryLocations(
+    { storeId: staff?.storeId, limit: 100 },
+    { enabled: allowed },
+  );
+  const allLocations = allLocPage?.data ?? [];
+
   const { data: page, isLoading } = useIngredients(
     {
       storeId: staff?.storeId,
@@ -146,17 +155,6 @@ const OutstorePage = () => {
     Number(
       itemLocations.find((l) => l.locationId === locId)?.currentStock ?? 0,
     );
-
-  // When a specific location is selected, show that location's stock (the
-  // quantity tagged to that location) rather than the aggregate. The Out-Store
-  // page in particular must show the per-location count, not the total.
-  const displayStockFor = (i: Ingredient): { current: number; min: number } => {
-    if (locationId === ALL) {
-      return { current: Number(i.currentStock), min: Number(i.minStock) };
-    }
-    const loc = i.locations?.find((l) => l.locationId === locationId);
-    return { current: Number(loc?.currentStock ?? 0), min: Number(loc?.minStock ?? 0) };
-  };
 
   // When a specific location is selected, show that location's stock (the
   // quantity tagged to that location) rather than the aggregate. The Out-Store
