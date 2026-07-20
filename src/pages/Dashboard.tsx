@@ -391,7 +391,21 @@ const Dashboard = () => {
             {services.map((service) => (
               <button
                 key={service.title}
-                onClick={() => navigate(service.route)}
+                onClick={() => {
+                  // Staff must be clocked in before using any workstation
+                  // function — offer to clock in on the spot.
+                  if (!isClockedIn) {
+                    setConfirmDialog({
+                      open: true,
+                      title: "Clock in required",
+                      description:
+                        "You must clock in before using workstation functions. Clock in now?",
+                      action: handleClockToggle,
+                    });
+                    return;
+                  }
+                  navigate(service.route);
+                }}
                 className="bg-card rounded-2xl border border-border p-4 sm:p-5 text-left hover:border-primary/40 hover:shadow-md hover:shadow-primary/5 transition-all duration-200 group flex flex-col"
               >
                 <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center bg-secondary/60 group-hover:bg-primary/10 transition-colors mb-3">
@@ -413,7 +427,13 @@ const Dashboard = () => {
         onOpenChange={(open) => setConfirmDialog({ ...confirmDialog, open })} 
         title={confirmDialog.title} 
         description={confirmDialog.description} 
-        onConfirm={() => { confirmDialog.action(); setConfirmDialog({ ...confirmDialog, open: false }); }} 
+        onConfirm={() => {
+          // Close first, then run — actions may open a follow-up dialog
+          // (e.g. "Clock in required" → "No shift today") which must not be
+          // clobbered by this close.
+          setConfirmDialog({ ...confirmDialog, open: false });
+          confirmDialog.action();
+        }}
       />
     </div>
   );

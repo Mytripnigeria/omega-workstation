@@ -1,12 +1,36 @@
 import { useCallback, useRef, useEffect } from "react";
 import { getCachedStaffPreference } from "./useStaffPreferences";
 
+// One shared AudioContext for every beep in the app. Browsers create contexts
+// in the "suspended" state unless construction/resume happens inside a user
+// gesture — unlockAudio() is called from a one-time gesture listener (see
+// POSPage) so notification tones fired by background polling are audible.
+let sharedCtx: AudioContext | null = null;
+
+function getAudioContext(): AudioContext {
+  if (!sharedCtx) {
+    sharedCtx = new (window.AudioContext ||
+      (window as any).webkitAudioContext)();
+  }
+  return sharedCtx;
+}
+
+/** Create/resume the shared AudioContext. Must be called from a user gesture. */
+export function unlockAudio(): void {
+  try {
+    const ctx = getAudioContext();
+    if (ctx.state === "suspended") void ctx.resume();
+  } catch {
+    // Audio unavailable (e.g. no output device) — beeps just stay silent.
+  }
+}
+
 export const useBeepSound = () => {
   const playBeep = useCallback(() => {
     // Respect the staff member's beep preference (settable from /settings).
     if (!getCachedStaffPreference("beepEnabled")) return;
 
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const audioContext = getAudioContext();
     const oscillator = audioContext.createOscillator();
     const gainNode = audioContext.createGain();
 
@@ -26,14 +50,11 @@ export const useBeepSound = () => {
 
 export const useContinuousBeep = () => {
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
 
   const playNotificationTone = useCallback(() => {
-    if (!audioContextRef.current) {
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-    }
-    const ctx = audioContextRef.current;
-    
+    const ctx = getAudioContext();
+    if (ctx.state === "suspended") void ctx.resume();
+
     const playTone = (frequency: number, startTime: number, duration: number) => {
       const oscillator = ctx.createOscillator();
       const gainNode = ctx.createGain();
@@ -45,7 +66,7 @@ export const useContinuousBeep = () => {
       oscillator.start(ctx.currentTime + startTime);
       oscillator.stop(ctx.currentTime + startTime + duration);
     };
-    
+
     playTone(880, 0, 0.15);
     playTone(1100, 0.2, 0.15);
     playTone(880, 0.4, 0.15);
@@ -55,6 +76,7 @@ export const useContinuousBeep = () => {
     // Play immediately
     playNotificationTone();
     // Then repeat every 3 seconds
+    if (intervalRef.current) clearInterval(intervalRef.current);
     intervalRef.current = setInterval(playNotificationTone, 3000);
   }, [playNotificationTone]);
 

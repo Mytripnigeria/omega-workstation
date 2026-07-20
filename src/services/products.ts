@@ -31,6 +31,7 @@ export interface Product {
   description: string | null;
   productCode: string | null;
   categoryId: string | null;
+  categoryName: string | null;
   price: number;
   sellingPrice: number;
   sku: string | null;

@@ -238,14 +238,26 @@ const DeliveryPage = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {available.map((d) => (
                     <div key={d.id} className="bg-card border border-border rounded-2xl p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-bold text-foreground">#{d.orderNumber}</span>
-                        <Badge className="bg-status-warning/10 text-status-warning">New</Badge>
+                      <div
+                        className="cursor-pointer"
+                        onClick={() => setSelectedDelivery(d)}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-bold text-foreground">#{d.orderNumber}</span>
+                          <Badge className="bg-status-warning/10 text-status-warning">New</Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground mb-1">
+                          {d.customerName ?? "Customer"}
+                          {d.items.length > 0 &&
+                            ` · ${d.items.reduce((s, i) => s + i.quantity, 0)} item${
+                              d.items.reduce((s, i) => s + i.quantity, 0) === 1 ? "" : "s"
+                            }`}
+                        </p>
+                        <p className="text-sm text-muted-foreground mb-3 flex items-center gap-1">
+                          <MapPin className="w-3 h-3" />
+                          {d.address ?? "Delivery address"}
+                        </p>
                       </div>
-                      <p className="text-sm text-muted-foreground mb-3 flex items-center gap-1">
-                        <MapPin className="w-3 h-3" />
-                        {d.address ?? "Delivery address"}
-                      </p>
                       <Button
                         className="w-full rounded-xl"
                         onClick={() => handleAccept(d)}
@@ -377,6 +389,43 @@ const DeliveryPage = () => {
                   </div>
                 )}
               </div>
+
+              {selectedDelivery.items.length > 0 && (
+                <div className="bg-secondary/50 rounded-xl p-4">
+                  <ul className="space-y-1">
+                    {selectedDelivery.items.map((item, idx) => (
+                      <li key={idx} className="text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-foreground">
+                            {item.quantity}× {item.name}
+                          </span>
+                          {item.notes && (
+                            <span className="text-xs text-muted-foreground italic">
+                              {item.notes}
+                            </span>
+                          )}
+                        </div>
+                        {item.variation?.name && (
+                          <p className="text-xs text-muted-foreground">{item.variation.name}</p>
+                        )}
+                        {(item.addons ?? []).length > 0 && (
+                          <p className="text-xs text-muted-foreground">
+                            + {(item.addons ?? []).map((a) => a.name).filter(Boolean).join(", ")}
+                          </p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                  {selectedDelivery.orderTotal != null && (
+                    <div className="flex items-center justify-between pt-3 mt-3 border-t border-border">
+                      <span className="text-sm text-muted-foreground">Total</span>
+                      <span className="text-lg font-bold text-foreground">
+                        ₦{Number(selectedDelivery.orderTotal).toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {selectedDelivery.latitude && selectedDelivery.longitude && (
                 <Button

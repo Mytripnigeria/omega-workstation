@@ -1,10 +1,20 @@
 // Mirrors backend DeliveryResponseDto.
 export type DeliveryStatus =
+  | "awaiting_dispatch"
   | "pending"
   | "assigned"
   | "in_transit"
   | "delivered"
   | "failed";
+
+export interface DeliveryOrderItem {
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  variation: { name?: string } | null;
+  addons: Array<{ name?: string; price?: number }> | null;
+  notes: string | null;
+}
 
 export interface Delivery {
   id: string;
@@ -18,6 +28,8 @@ export interface Delivery {
   latitude: number | null;
   longitude: number | null;
   status: DeliveryStatus;
+  dispatchedAt: string | null;
+  dispatchedByName: string | null;
   assignedAt: string | null;
   pickedUpAt: string | null;
   deliveredAt: string | null;
@@ -25,6 +37,12 @@ export interface Delivery {
   notes: string | null;
   orderNumber: number | null;
   customerName: string | null;
+  items: DeliveryOrderItem[];
+  orderTotal: number | null;
+  orderStatus: string | null;
+  orderNotes: string | null;
+  paymentChannel: string | null;
+  paymentStatus: string | null;
   createdAt: string;
   updatedAt: string;
 }

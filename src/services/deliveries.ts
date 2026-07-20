@@ -40,6 +40,9 @@ export const deliveriesService = {
       body: JSON.stringify(input),
     }),
 
+  dispatch: (id: string): Promise<Delivery> =>
+    workstationApi.request<Delivery>(`/deliveries/${id}/dispatch`, { method: "POST" }),
+
   assign: (id: string, riderStaffId: string): Promise<Delivery> =>
     workstationApi.request<Delivery>(`/deliveries/${id}/assign`, {
       method: "POST",
