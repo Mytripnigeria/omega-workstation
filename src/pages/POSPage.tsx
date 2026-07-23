@@ -66,7 +66,7 @@ import { useBeepSound, unlockAudio } from "@/hooks/useBeepSound";
 import { useCategories } from "@/hooks/useCategories";
 import { useProducts } from "@/hooks/useProducts";
 import { useCancelOrder, useCreateOrder, useOrders, useRecordPayment, useUpdateOrderStatus } from "@/hooks/useOrders";
-import { useMyActiveCashSession, useOpenCashSession, useCloseCashSession, useStoreActiveCashSessions, useJoinCashSession } from "@/hooks/useCashSession";
+import { useMyActiveCashSession, useOpenCashSession, useCloseCashSession, useStoreActiveCashSessions, useJoinCashSession, useCashSessionExpected } from "@/hooks/useCashSession";
 import { useEnabledPaymentMethods } from "@/hooks/usePaymentMethods";
 import { useFunctionAccess } from "@/hooks/useFunctionAccess";
 import { canAccessFunction } from "@/lib/roles";
@@ -252,7 +252,10 @@ const POSPage = () => {
     // Load ALL menu categories (not just active ones): a category can be
     // inactive while still holding active products, and the client expects
     // every category that has available items (e.g. Rice, Spaghetti) to show.
-  } = useCategories("menu", { activeOnly: false });
+  } = useCategories("menu", {
+    activeOnly: false,
+    storeId: workstationAuth.getStaff()?.storeId,
+  });
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
 
   // Defaults to the "all" view so every loaded item is browsable without
@@ -462,6 +465,29 @@ const POSPage = () => {
   const openRegisterMutation = useOpenCashSession();
   const closeRegisterMutation = useCloseCashSession();
   const [registerForm, setRegisterForm] = useState({ counterName: "", cashAtHand: "" });
+  // Register CLOSE flow. The cashier counts the drawer here, so we prefill each
+  // tender with what the ledger expects (fetched live) and send whatever they
+  // counted. The old flow sent activeRegister.expectedCash — which is 0 on an
+  // OPEN session — so every close reported a huge shortage and a ₦0 closing
+  // amount. This is the fix for both "account balancing → short" and
+  // "registers not capturing closing amount".
+  const [showCloseModal, setShowCloseModal] = useState(false);
+  const [closeForm, setCloseForm] = useState({ actualCash: "", actualCard: "", actualMobile: "" });
+  const { data: closeExpected } = useCashSessionExpected(
+    activeRegister?.id,
+    showCloseModal,
+  );
+  // Prefill the counted fields with the expected figures once they arrive, so a
+  // cashier who just clicks through closes balanced rather than short.
+  useEffect(() => {
+    if (showCloseModal && closeExpected) {
+      setCloseForm({
+        actualCash: String(closeExpected.expectedCash),
+        actualCard: String(closeExpected.expectedCard),
+        actualMobile: String(closeExpected.expectedMobile),
+      });
+    }
+  }, [showCloseModal, closeExpected]);
   // When no personal register is open, offer to join a colleague's open
   // register on this store instead of forcing a new one open.
   const registerGateOpen = posMode === "counter" && !registerLoading && !activeRegister;
@@ -500,31 +526,55 @@ const POSPage = () => {
     );
   };
 
+  // Opens the count-the-drawer modal (expected figures load inside it).
   const handleCloseRegister = () => {
     if (!activeRegister) return;
-    setConfirmDialog({
-      open: true,
-      title: "Close Register",
-      description: "Close this register and end the session?",
-      action: () =>
-        closeRegisterMutation.mutate(
-          {
-            id: activeRegister.id,
-            input: {
-              actualCash: Number(activeRegister.expectedCash) || 0,
-              actualCard: Number(activeRegister.expectedCard) || 0,
-              actualMobile: Number(activeRegister.expectedMobile) || 0,
-            },
-          },
-          {
-            onSuccess: () =>
-              setToast({ open: true, type: "success", title: "Register closed" }),
-            onError: (e: Error) =>
-              setToast({ open: true, type: "error", title: e.message ?? "Failed to close register" }),
-          },
-        ),
-    });
+    setCloseForm({ actualCash: "", actualCard: "", actualMobile: "" });
+    setShowCloseModal(true);
   };
+
+  const submitCloseRegister = () => {
+    if (!activeRegister) return;
+    const num = (v: string, fallback: number) => {
+      const n = Number(v);
+      return v.trim() === "" || Number.isNaN(n) ? fallback : n;
+    };
+    closeRegisterMutation.mutate(
+      {
+        id: activeRegister.id,
+        input: {
+          actualCash: num(closeForm.actualCash, closeExpected?.expectedCash ?? 0),
+          actualCard: num(closeForm.actualCard, closeExpected?.expectedCard ?? 0),
+          actualMobile: num(closeForm.actualMobile, closeExpected?.expectedMobile ?? 0),
+        },
+      },
+      {
+        onSuccess: (session) => {
+          setShowCloseModal(false);
+          const diff = Number(session.difference);
+          setToast({
+            open: true,
+            type: diff === 0 ? "success" : "warning",
+            title: "Register closed",
+            message:
+              diff === 0
+                ? `Balanced — closing amount ₦${Number(session.actualTotal).toLocaleString()}`
+                : `${diff < 0 ? "Short" : "Over"} by ₦${Math.abs(diff).toLocaleString()} — closing amount ₦${Number(session.actualTotal).toLocaleString()}`,
+          });
+        },
+        onError: (e: Error) =>
+          setToast({ open: true, type: "error", title: e.message ?? "Failed to close register" }),
+      },
+    );
+  };
+
+  // Live difference preview inside the close modal.
+  const closeCounted =
+    (Number(closeForm.actualCash) || 0) +
+    (Number(closeForm.actualCard) || 0) +
+    (Number(closeForm.actualMobile) || 0);
+  const closeExpectedTotal = closeExpected?.expectedTotal ?? 0;
+  const closeDifference = Math.round((closeCounted - closeExpectedTotal) * 100) / 100;
   const [discount, setDiscount] = useState(0);
   const [showDiscountModal, setShowDiscountModal] = useState(false);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
@@ -827,43 +877,69 @@ const POSPage = () => {
     }
   };
 
+  /**
+   * Books an order (Quick Bill or Process Bill) AND records the payment with
+   * the method the cashier selected first — the client's flow: "select payment
+   * method then book order via quick bill or process bill". The tender the
+   * customer is paying through is captured at booking, not as a separate step.
+   */
+  const bookOrder = async (billType: "quick" | "process") => {
+    if (cart.length === 0) return;
+    const method = selectedPaymentMethod;
+    const result = await submitOrder(orderType === "delivery", undefined, billType);
+    if (!result) return;
+    try {
+      if (method) {
+        await recordPaymentMutation.mutateAsync({
+          id: result.order.id,
+          amount: Number(result.order.total),
+          paymentChannel: paymentChannelForType(method.type),
+          paymentMethodId: method.id,
+        });
+      }
+      setCurrentReceipt(result.display);
+      setShowReceiptModal(true);
+      setToast({
+        open: true,
+        type: "success",
+        title: billType === "quick" ? "Order booked" : "Sent to kitchen",
+        message: method
+          ? `${result.display.id} • paid via ${method.label}`
+          : `${result.display.id} placed`,
+      });
+      setCart([]);
+      setDiscount(0);
+      setCustomerName("");
+      setDeliveryAddress("");
+      setDeliveryRegionId("");
+    } catch (err) {
+      setToast({ open: true, type: "error", title: "Payment failed", message: (err as Error).message });
+    }
+  };
+
   const handleQuickBill = () => {
     if (cart.length === 0) return;
+    const method = selectedPaymentMethod;
     setConfirmDialog({
       open: true,
       title: "Quick Bill",
-      description: "Submit this order. Continue?",
-      action: async () => {
-        const result = await submitOrder(orderType === "delivery", undefined, "quick");
-        if (result) {
-          setCurrentReceipt(result.display);
-          setShowReceiptModal(true);
-          setToast({ open: true, type: "success", title: "Order Submitted", message: `Order ${result.display.id} placed.` });
-          setCart([]);
-          setDiscount(0);
-          setCustomerName("");
-        }
-      },
+      description: method
+        ? `Book this order and record ₦${Math.round(total).toLocaleString()} paid via ${method.label}?`
+        : "Submit this order. Continue?",
+      action: () => void bookOrder("quick"),
     });
   };
 
   const handleProcessBill = () => {
     if (cart.length === 0) return;
+    const method = selectedPaymentMethod;
     setConfirmDialog({
       open: true,
       title: "Process Bill",
-      description: "Send the order to the kitchen?",
-      action: async () => {
-        const result = await submitOrder(orderType === "delivery", undefined, "process");
-        if (result) {
-          setCurrentReceipt(result.display);
-          setShowReceiptModal(true);
-          setToast({ open: true, type: "success", title: "Order Sent", message: `${result.display.id} sent to kitchen.` });
-          setCart([]);
-          setDiscount(0);
-          setCustomerName("");
-        }
-      },
+      description: method
+        ? `Send to the kitchen and record ₦${Math.round(total).toLocaleString()} paid via ${method.label}?`
+        : "Send the order to the kitchen?",
+      action: () => void bookOrder("process"),
     });
   };
 
@@ -978,45 +1054,6 @@ const POSPage = () => {
    * financial-ledger transaction and marks the order paid (fixing both
    * "transactions don't record" and "paid amount shows 0").
    */
-  const handleTakePayment = (method: WorkstationPaymentMethod) => {
-    if (cart.length === 0) return;
-    setConfirmDialog({
-      open: true,
-      title: `Take Payment — ${method.label}`,
-      description: `Record ₦${Math.round(total).toLocaleString()} paid via ${method.label}?`,
-      action: async () => {
-        // Cashier-created + immediately paid ⇒ accepted on create.
-        const result = await submitOrder(orderType === "delivery", undefined, "process");
-        if (!result) return;
-        try {
-          await recordPaymentMutation.mutateAsync({
-            id: result.order.id,
-            amount: Number(result.order.total),
-            paymentChannel: paymentChannelForType(method.type),
-            paymentMethodId: method.id,
-          });
-          setCurrentReceipt(result.display);
-          setShowReceiptModal(true);
-          setToast({
-            open: true,
-            type: "success",
-            title: "Payment recorded",
-            message: `${result.display.id} paid via ${method.label}.`,
-          });
-          setCart([]);
-          setDiscount(0);
-          setCustomerName("");
-        } catch (err) {
-          setToast({
-            open: true,
-            type: "error",
-            title: "Payment failed",
-            message: (err as Error).message,
-          });
-        }
-      },
-    });
-  };
 
   const holdOrder = () => {
     if (cart.length === 0) return;
@@ -1708,64 +1745,51 @@ const POSPage = () => {
                 </Button>
               )}
 
-              <div className="grid grid-cols-2 gap-2 mb-2">
-                <Button variant="outline" className="h-12 rounded-xl" disabled={cart.length === 0} onClick={handleQuickBill}>
+              {/* Client flow (sixth feedback): FIRST pick the payment method
+                  the customer is paying through, THEN book the order via Quick
+                  Bill or Process Bill — booking records the payment with the
+                  chosen method. Method selection comes first for that reason. */}
+              <div className="mb-2">
+                <p className="text-xs text-muted-foreground mb-1.5">Payment method</p>
+                <div className="flex items-center gap-2">
+                  {enabledPaymentMethods.length === 0 ? (
+                    <Button
+                      variant="outline"
+                      className="h-11 rounded-xl flex-1 text-xs text-muted-foreground"
+                      disabled
+                      title="Add payment methods in the merchant dashboard → Settings → Payment Methods"
+                    >
+                      No payment methods
+                    </Button>
+                  ) : (
+                    enabledPaymentMethods.map((m) => (
+                      <Button
+                        key={m.id}
+                        variant={selectedPaymentMethodId === m.id ? "default" : "outline"}
+                        className="h-11 rounded-xl flex-1 min-w-0"
+                        onClick={() => setSelectedPaymentMethodId(m.id)}
+                        title={`Paying by ${m.label}`}
+                      >
+                        {paymentIcon(m.type)}
+                        <span className="truncate ml-1">{m.label}</span>
+                      </Button>
+                    ))
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 mb-2">
+                <Button variant="outline" className="h-12 rounded-xl px-3 flex-shrink-0" disabled={cart.length === 0} onClick={holdOrder} title="Hold order">
+                  <Pause className="w-4 h-4" />
+                </Button>
+                <Button variant="outline" className="h-12 rounded-xl flex-1" disabled={cart.length === 0} onClick={handleQuickBill}>
                   <Zap className="w-4 h-4 mr-2" />
                   Quick Bill
                 </Button>
-                <Button className="h-12 rounded-xl" disabled={cart.length === 0} onClick={handleProcessBill}>
+                <Button className="h-12 rounded-xl flex-1" disabled={cart.length === 0} onClick={handleProcessBill}>
                   <ChefHat className="w-4 h-4 mr-2" />
                   Process Bill
                 </Button>
               </div>
-              {/* Payment method is a SELECTION made before proceeding — it
-                  records what the customer is paying through. Picking one no
-                  longer submits the order on its own. */}
-              <div className="flex items-center gap-2 mb-2">
-                <Button variant="outline" className="h-11 rounded-xl px-3 flex-shrink-0" disabled={cart.length === 0} onClick={holdOrder} title="Hold order">
-                  <Pause className="w-4 h-4" />
-                </Button>
-                {enabledPaymentMethods.length === 0 ? (
-                  <Button
-                    variant="outline"
-                    className="h-11 rounded-xl flex-1 text-xs text-muted-foreground"
-                    disabled
-                    title="Add payment methods in the merchant dashboard → Settings → Payment Methods"
-                  >
-                    No payment methods
-                  </Button>
-                ) : (
-                  enabledPaymentMethods.map((m) => (
-                    <Button
-                      key={m.id}
-                      variant={selectedPaymentMethodId === m.id ? "default" : "outline"}
-                      className="h-11 rounded-xl flex-1 min-w-0"
-                      onClick={() => setSelectedPaymentMethodId(m.id)}
-                      title={`Paying by ${m.label}`}
-                    >
-                      {paymentIcon(m.type)}
-                      <span className="truncate ml-1">{m.label}</span>
-                    </Button>
-                  ))
-                )}
-              </div>
-              {enabledPaymentMethods.length > 0 && (
-                <Button
-                  className="w-full h-12 rounded-xl"
-                  disabled={
-                    cart.length === 0 ||
-                    !selectedPaymentMethod ||
-                    recordPaymentMutation.isPending
-                  }
-                  onClick={() =>
-                    selectedPaymentMethod && handleTakePayment(selectedPaymentMethod)
-                  }
-                >
-                  <Wallet className="w-4 h-4 mr-2" />
-                  Take Payment
-                  {selectedPaymentMethod ? ` • ${selectedPaymentMethod.label}` : ""}
-                </Button>
-              )}
             </>
           )}
 
@@ -1895,6 +1919,63 @@ const POSPage = () => {
             </div>
             <Button className="w-full rounded-xl" onClick={handleOpenRegister} disabled={openRegisterMutation.isPending}>
               Open Register
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Close Register — cashier counts the drawer; each tender is prefilled
+          with what the ledger expects so the closing amount and difference are
+          captured correctly (fixes the "always short / ₦0 closing amount"). */}
+      <Dialog open={showCloseModal} onOpenChange={setShowCloseModal}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Close Register</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              Count the drawer and confirm the amounts. Figures are pre-filled
+              with what the register is expected to hold.
+            </p>
+            <div className="space-y-2">
+              <Label>Cash counted (incl. float)</Label>
+              <Input
+                type="number"
+                min={0}
+                value={closeForm.actualCash}
+                onChange={(e) => setCloseForm((p) => ({ ...p, actualCash: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground">Expected ₦{Number(closeExpected?.expectedCash ?? 0).toLocaleString()}</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Card / POS counted</Label>
+              <Input
+                type="number"
+                min={0}
+                value={closeForm.actualCard}
+                onChange={(e) => setCloseForm((p) => ({ ...p, actualCard: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground">Expected ₦{Number(closeExpected?.expectedCard ?? 0).toLocaleString()}</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Transfer / wallet counted</Label>
+              <Input
+                type="number"
+                min={0}
+                value={closeForm.actualMobile}
+                onChange={(e) => setCloseForm((p) => ({ ...p, actualMobile: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground">Expected ₦{Number(closeExpected?.expectedMobile ?? 0).toLocaleString()}</p>
+            </div>
+            <div className="flex items-center justify-between rounded-xl bg-muted/50 p-3 text-sm">
+              <span className="text-muted-foreground">Difference</span>
+              <span className={closeDifference === 0 ? "font-semibold" : closeDifference < 0 ? "font-semibold text-destructive" : "font-semibold text-status-success"}>
+                {closeDifference < 0 ? "-" : closeDifference > 0 ? "+" : ""}₦{Math.abs(closeDifference).toLocaleString()}
+                {closeDifference === 0 ? " (balanced)" : closeDifference < 0 ? " (short)" : " (over)"}
+              </span>
+            </div>
+            <Button className="w-full rounded-xl" onClick={submitCloseRegister} disabled={closeRegisterMutation.isPending}>
+              Close Register
             </Button>
           </div>
         </DialogContent>

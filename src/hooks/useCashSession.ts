@@ -47,3 +47,13 @@ export function useCloseCashSession() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["cash-session"] }),
   });
 }
+
+/** Live expected drawer totals for the close screen. Only fetched when enabled. */
+export function useCashSessionExpected(id: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ["cash-session", "expected", id],
+    queryFn: () => cashSessionsService.expected(id!),
+    enabled: enabled && !!id,
+    staleTime: 5 * 1000,
+  });
+}

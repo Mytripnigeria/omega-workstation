@@ -31,10 +31,19 @@ export interface OpenCashSessionInput {
 }
 
 export interface CloseCashSessionInput {
-  actualCash: number;
-  actualCard: number;
-  actualMobile: number;
+  /** Counted cash in the drawer (including opening float). Omit to accept expected. */
+  actualCash?: number;
+  actualCard?: number;
+  actualMobile?: number;
   notes?: string;
+}
+
+/** Live expected totals for an OPEN session, from the order ledger. */
+export interface CashSessionExpected {
+  expectedCash: number;
+  expectedCard: number;
+  expectedMobile: number;
+  expectedTotal: number;
 }
 
 export const cashSessionsService = {
@@ -55,6 +64,12 @@ export const cashSessionsService = {
       method: "POST",
       body: JSON.stringify(input),
     }),
+
+  /** What the register should hold right now (per tender), for the close screen. */
+  expected: (id: string): Promise<CashSessionExpected> =>
+    workstationApi.request<CashSessionExpected>(
+      `/cash-sessions/${id}/expected`,
+    ),
 
   close: (id: string, input: CloseCashSessionInput): Promise<CashSession> =>
     workstationApi.request<CashSession>(`/cash-sessions/${id}/close`, {
