@@ -8,6 +8,13 @@ export interface ReceiptInfo {
   receiptHeader: string | null;
   receiptFooter: string | null;
   showServerName: boolean;
+  /** Business tax rate as a fraction (0.075 = 7.5%). Set in the merchant's business profile. */
+  taxRate: number;
+  /** Display name of the tax, e.g. "VAT". */
+  taxLabel: string;
+  /** True when the configured rate is already included in listed prices. */
+  taxInclusive: boolean;
+  showTaxBreakdown: boolean;
 }
 
 /** Store/business receipt details for the POS receipt (header/footer/address). */

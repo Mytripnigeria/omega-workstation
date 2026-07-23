@@ -55,6 +55,12 @@ interface ServiceItem {
   icon: React.ElementType;
   route: string;
   color: string;
+  /**
+   * Whether staff must be clocked in to open this tile. Shifts, Printers and
+   * Profile are exempt: you need Shifts to clock in at all, and printers/profile
+   * are setup screens rather than trading functions.
+   */
+  requiresClockIn?: boolean;
 }
 
 const services: ServiceItem[] = [
@@ -66,10 +72,10 @@ const services: ServiceItem[] = [
   { title: "Instore", description: "Store inventory", icon: Package, route: "/instore", color: "text-category-sage" },
   { title: "Outstore", description: "Kitchen inventory", icon: Package, route: "/outstore", color: "text-category-coral" },
   { title: "Checklist", description: "Shift tasks", icon: ClipboardCheck, route: "/checklist", color: "text-category-lavender" },
-  { title: "Shifts", description: "Your schedule", icon: Calendar, route: "/shifts", color: "text-category-sky" },
+  { title: "Shifts", description: "Your schedule", icon: Calendar, route: "/shifts", requiresClockIn: false, color: "text-category-sky" },
   { title: "Expenses", description: "Manage costs", icon: BarChart3, route: "/expenses", color: "text-category-peach" },
-  { title: "Printers", description: "Print settings", icon: Printer, route: "/printers", color: "text-category-mint" },
-  { title: "Profile", description: "Work profile", icon: User, route: "/profile", color: "text-category-pink" },
+  { title: "Printers", description: "Print settings", icon: Printer, route: "/printers", requiresClockIn: false, color: "text-category-mint" },
+  { title: "Profile", description: "Work profile", icon: User, route: "/profile", requiresClockIn: false, color: "text-category-pink" },
   { title: "Reports", description: "Analytics", icon: BarChart3, route: "/reports", color: "text-category-sage" },
   { title: "Managers", description: "Overview", icon: Shield, route: "/managers", color: "text-category-cream" },
 ];
@@ -393,8 +399,11 @@ const Dashboard = () => {
                 key={service.title}
                 onClick={() => {
                   // Staff must be clocked in before using any workstation
-                  // function — offer to clock in on the spot.
-                  if (!isClockedIn) {
+                  // function — offer to clock in on the spot. Tiles marked
+                  // requiresClockIn: false (Shifts, Printers, Profile) are
+                  // exempt: Shifts is where you clock in, and the other two are
+                  // setup screens rather than trading functions.
+                  if (service.requiresClockIn !== false && !isClockedIn) {
                     setConfirmDialog({
                       open: true,
                       title: "Clock in required",

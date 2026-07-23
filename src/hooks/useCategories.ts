@@ -18,7 +18,14 @@ export function useCategories(type: CategoryType, opts: UseCategoriesOptions = {
   return useQuery<Category[]>({
     queryKey: ["categories", type, activeOnly],
     queryFn: async () => {
-      const res = await categoriesService.list({ type, status: activeOnly });
+      // The backend reads `status` as an exact match, not as "active only":
+      // omit it to get every category, send true to restrict to active ones.
+      // Passing `false` used to return ONLY INACTIVE categories, which is why
+      // the POS showed no category pills even though the items were there.
+      const res = await categoriesService.list({
+        type,
+        status: activeOnly ? true : undefined,
+      });
       return res.data;
     },
     staleTime: 5 * 60 * 1000,

@@ -9,4 +9,9 @@ export interface Category {
   imageUrl?: string;
   isActive: boolean;
   order: number;
+  /**
+   * Channels the merchant enabled this category for (e.g. ["pos","storefront"]).
+   * Empty/absent means every channel.
+   */
+  visibility?: string[] | null;
 }

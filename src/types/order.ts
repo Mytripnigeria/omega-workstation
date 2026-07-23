@@ -45,6 +45,9 @@ export interface Order {
   subtotal: number;
   taxAmount: number;
   discountAmount: number;
+  /** Delivery fee applied from the selected region (0 for non-delivery orders). */
+  deliveryFee?: number;
+  deliveryRegionName?: string | null;
   total: number;
   paidAmount: number;
   paymentMethodId: string | null;
@@ -98,6 +101,13 @@ export interface CreateOrderInput {
   accept?: boolean;
   /** Quick Bill: ready-made items only, skips the kitchen and starts READY. */
   quickBill?: boolean;
+  /**
+   * Delivery region for a counter-taken delivery order. The backend applies
+   * that region's fee — the POS never sends a delivery price of its own.
+   */
+  deliveryRegionId?: string;
+  /** Address snapshot so the rider gets a real destination. */
+  deliveryAddress?: Record<string, unknown>;
   items: CreateOrderItemInput[];
 }
 

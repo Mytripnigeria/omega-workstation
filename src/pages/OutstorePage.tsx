@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Package,
@@ -7,7 +7,6 @@ import {
   Filter,
   ArrowLeft,
   Eye,
-  Plus,
   Minus,
   Repeat,
   History,
@@ -119,6 +118,20 @@ const OutstorePage = () => {
   );
   const allLocations = allLocPage?.data ?? [];
 
+  // Ids of the Out-Store locations, used to keep every location picker on this
+  // page to Out-Store only (client spec: Use/Waste may only offer out-store
+  // locations, and a transfer out of here must land in-store).
+  const outstoreIds = useMemo(
+    () => new Set(locations.map((l) => l.id)),
+    [locations],
+  );
+  /** An ingredient's stock rows, narrowed to Out-Store locations. */
+  const outstoreRowsOf = useCallback(
+    (item?: { locations?: { locationId: string; currentStock: number; minStock?: number }[] } | null) =>
+      (item?.locations ?? []).filter((l) => outstoreIds.has(l.locationId)),
+    [outstoreIds],
+  );
+
   const { data: page, isLoading } = useIngredients(
     {
       storeId: staff?.storeId,
@@ -159,9 +172,22 @@ const OutstorePage = () => {
   // When a specific location is selected, show that location's stock (the
   // quantity tagged to that location) rather than the aggregate. The Out-Store
   // page in particular must show the per-location count, not the total.
+  /**
+   * Stock as this page should report it. With a location selected that's that
+   * location's row; with "All locations" it's the total across Out-Store
+   * locations only — the global aggregate would include In-Store bulk stock
+   * that hasn't reached the kitchen yet.
+   */
   const displayStockFor = (i: Ingredient): { current: number; min: number } => {
     if (locationId === ALL) {
-      return { current: Number(i.currentStock), min: Number(i.minStock) };
+      const rows = outstoreRowsOf(i);
+      if (rows.length === 0) {
+        return { current: Number(i.currentStock), min: Number(i.minStock) };
+      }
+      return {
+        current: rows.reduce((sum, l) => sum + Number(l.currentStock), 0),
+        min: rows.reduce((sum, l) => sum + Number(l.minStock ?? 0), 0),
+      };
     }
     const loc = i.locations?.find((l) => l.locationId === locationId);
     return { current: Number(loc?.currentStock ?? 0), min: Number(loc?.minStock ?? 0) };
@@ -426,16 +452,10 @@ const OutstorePage = () => {
                         ? "Across all locations"
                         : `at ${locationName(locationId)}`}
                     </p>
+                    {/* No "Add" here: Out-Store stock only ever arrives by
+                        transfer from In-Store, so adding it directly would
+                        create inventory out of nowhere. */}
                     <div className="grid grid-cols-2 gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="rounded-lg"
-                        onClick={() => openAdjust(i, "add")}
-                      >
-                        <Plus className="w-4 h-4 mr-1" />
-                        Add
-                      </Button>
                       <Button
                         variant="outline"
                         size="sm"
@@ -503,7 +523,7 @@ const OutstorePage = () => {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            {(adjustModal.item?.locations?.length ?? 0) > 0 && (
+            {outstoreRowsOf(adjustModal.item).length > 0 && (
               <div>
                 <label className="text-sm font-medium text-foreground mb-2 block">
                   Location
@@ -513,7 +533,7 @@ const OutstorePage = () => {
                     <SelectValue placeholder="Select location" />
                   </SelectTrigger>
                   <SelectContent>
-                    {(adjustModal.item?.locations ?? []).map((l) => (
+                    {outstoreRowsOf(adjustModal.item).map((l) => (
                       <SelectItem key={l.locationId} value={l.locationId}>
                         {locationName(l.locationId)} ({Number(l.currentStock)})
                       </SelectItem>
@@ -595,11 +615,13 @@ const OutstorePage = () => {
                   <SelectValue placeholder="Source location" />
                 </SelectTrigger>
                 <SelectContent>
-                  {itemLocations.map((l) => (
-                    <SelectItem key={l.locationId} value={l.locationId}>
-                      {locationName(l.locationId)} ({Number(l.currentStock)})
-                    </SelectItem>
-                  ))}
+                  {itemLocations
+                    .filter((l) => outstoreIds.has(l.locationId))
+                    .map((l) => (
+                      <SelectItem key={l.locationId} value={l.locationId}>
+                        {locationName(l.locationId)} ({Number(l.currentStock)})
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
@@ -613,7 +635,9 @@ const OutstorePage = () => {
                 </SelectTrigger>
                 <SelectContent>
                   {allLocations
-                    .filter((l) => l.id !== transferFromLoc)
+                    .filter(
+                      (l) => l.id !== transferFromLoc && l.type === "instore",
+                    )
                     .map((l) => (
                       <SelectItem key={l.id} value={l.id}>
                         {l.name} ({itemStockAt(l.id)})
@@ -621,9 +645,10 @@ const OutstorePage = () => {
                     ))}
                 </SelectContent>
               </Select>
-              {itemLocations.length === 0 && (
+              {itemLocations.filter((l) => outstoreIds.has(l.locationId))
+                .length === 0 && (
                 <p className="text-xs text-muted-foreground mt-1">
-                  Item has no stocked location to transfer from.
+                  Item has no stocked Out-Store location to transfer from.
                 </p>
               )}
             </div>
@@ -681,10 +706,14 @@ const OutstorePage = () => {
                 id: selectedItem.id,
                 name: selectedItem.name,
                 category: "Ingredient",
-                quantity: Number(selectedItem.currentStock),
+                // The stock at the selected Out-Store location (or the
+                // Out-Store total under "All locations") — not the global
+                // figure, which also counts In-Store bulk stock.
+                quantity: displayStockFor(selectedItem).current,
                 unit: selectedItem.unit,
-                location: selectedItem.storeId,
-                locationName: "Outstore",
+                location: locationId === ALL ? selectedItem.storeId : locationId,
+                locationName:
+                  locationId === ALL ? "All Out-Store" : locationName(locationId),
               }
             : null
         }

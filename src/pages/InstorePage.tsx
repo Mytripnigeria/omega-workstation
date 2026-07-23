@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Package,
@@ -118,6 +118,28 @@ const InstorePage = () => {
   );
   const allLocations = allLocPage?.data ?? [];
 
+  // Ids of the In-Store locations, used to keep every location picker on this
+  // page to In-Store only (client spec: Add/Reduce may only offer in-store
+  // locations, and a transfer out of here must land out-store).
+  const instoreIds = useMemo(
+    () => new Set(locations.map((l) => l.id)),
+    [locations],
+  );
+  /** An ingredient's stock rows, narrowed to In-Store locations. */
+  const instoreRowsOf = useCallback(
+    (
+      item?: {
+        locations?: {
+          locationId: string;
+          currentStock: number;
+          minStock?: number;
+        }[];
+      } | null,
+    ) =>
+      (item?.locations ?? []).filter((l) => instoreIds.has(l.locationId)),
+    [instoreIds],
+  );
+
   const { data: page, isLoading } = useIngredients(
     {
       storeId: staff?.storeId,
@@ -159,9 +181,22 @@ const InstorePage = () => {
   // When a specific location is selected, show that location's stock (the
   // quantity tagged to that location) rather than the aggregate across all
   // locations. "All locations" keeps the aggregate.
+  /**
+   * Stock as this page should report it. With a location selected that's that
+   * location's row; with "All locations" it's the total across In-Store
+   * locations only — the global aggregate would include Out-Store stock that
+   * isn't in this store room at all.
+   */
   const displayStockFor = (i: Ingredient): { current: number; min: number } => {
     if (locationId === ALL) {
-      return { current: Number(i.currentStock), min: Number(i.minStock) };
+      const rows = instoreRowsOf(i);
+      if (rows.length === 0) {
+        return { current: Number(i.currentStock), min: Number(i.minStock) };
+      }
+      return {
+        current: rows.reduce((sum, l) => sum + Number(l.currentStock), 0),
+        min: rows.reduce((sum, l) => sum + Number(l.minStock ?? 0), 0),
+      };
     }
     const loc = i.locations?.find((l) => l.locationId === locationId);
     return { current: Number(loc?.currentStock ?? 0), min: Number(loc?.minStock ?? 0) };
@@ -477,7 +512,7 @@ const InstorePage = () => {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            {(adjustModal.item?.locations?.length ?? 0) > 0 && (
+            {instoreRowsOf(adjustModal.item).length > 0 && (
               <div>
                 <label className="text-sm font-medium text-foreground mb-2 block">
                   Location
@@ -487,7 +522,7 @@ const InstorePage = () => {
                     <SelectValue placeholder="Select location" />
                   </SelectTrigger>
                   <SelectContent>
-                    {(adjustModal.item?.locations ?? []).map((l) => (
+                    {instoreRowsOf(adjustModal.item).map((l) => (
                       <SelectItem key={l.locationId} value={l.locationId}>
                         {locationName(l.locationId)} ({Number(l.currentStock)})
                       </SelectItem>
@@ -566,11 +601,13 @@ const InstorePage = () => {
                   <SelectValue placeholder="Source location" />
                 </SelectTrigger>
                 <SelectContent>
-                  {itemLocations.map((l) => (
-                    <SelectItem key={l.locationId} value={l.locationId}>
-                      {locationName(l.locationId)} ({Number(l.currentStock)})
-                    </SelectItem>
-                  ))}
+                  {itemLocations
+                    .filter((l) => instoreIds.has(l.locationId))
+                    .map((l) => (
+                      <SelectItem key={l.locationId} value={l.locationId}>
+                        {locationName(l.locationId)} ({Number(l.currentStock)})
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
@@ -584,7 +621,9 @@ const InstorePage = () => {
                 </SelectTrigger>
                 <SelectContent>
                   {allLocations
-                    .filter((l) => l.id !== transferFromLoc)
+                    .filter(
+                      (l) => l.id !== transferFromLoc && l.type === "outstore",
+                    )
                     .map((l) => (
                       <SelectItem key={l.id} value={l.id}>
                         {l.name} ({itemStockAt(l.id)})
@@ -592,9 +631,10 @@ const InstorePage = () => {
                     ))}
                 </SelectContent>
               </Select>
-              {itemLocations.length === 0 && (
+              {itemLocations.filter((l) => instoreIds.has(l.locationId))
+                .length === 0 && (
                 <p className="text-xs text-muted-foreground mt-1">
-                  Item has no stocked location to transfer from.
+                  Item has no stocked In-Store location to transfer from.
                 </p>
               )}
             </div>
@@ -652,10 +692,14 @@ const InstorePage = () => {
                 id: selectedItem.id,
                 name: selectedItem.name,
                 category: "Ingredient",
-                quantity: Number(selectedItem.currentStock),
+                // The stock at the selected In-Store location (or the In-Store
+                // total under "All locations") — not the global figure, which
+                // also counts Out-Store stock.
+                quantity: displayStockFor(selectedItem).current,
                 unit: selectedItem.unit,
-                location: selectedItem.storeId,
-                locationName: "Instore",
+                location: locationId === ALL ? selectedItem.storeId : locationId,
+                locationName:
+                  locationId === ALL ? "All In-Store" : locationName(locationId),
               }
             : null
         }

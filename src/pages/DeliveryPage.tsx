@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Bike,
@@ -12,6 +12,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { unlockAudio, useContinuousBeep } from "@/hooks/useBeepSound";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -89,6 +90,27 @@ const DeliveryPage = () => {
   const available = availablePage?.data ?? [];
 
   const currentStaffId = workstationAuth.getStaff()?.id ?? "";
+
+  // Keep beeping while any order is waiting to be accepted, so a rider who has
+  // stepped away from the screen still notices. Stops the moment the list
+  // empties (or the page unmounts — the hook cleans itself up).
+  const { startBeeping, stopBeeping } = useContinuousBeep();
+  useEffect(() => {
+    if (available.length > 0) startBeeping();
+    else stopBeeping();
+  }, [available.length, startBeeping, stopBeeping]);
+
+  // Browsers block audio until the user has interacted with the page; unlock on
+  // the first tap so the alert actually sounds.
+  useEffect(() => {
+    const onFirstGesture = () => unlockAudio();
+    window.addEventListener("pointerdown", onFirstGesture, { once: true });
+    window.addEventListener("keydown", onFirstGesture, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", onFirstGesture);
+      window.removeEventListener("keydown", onFirstGesture);
+    };
+  }, []);
 
   const pickup = usePickupDelivery();
   const deliver = useDeliverDelivery();

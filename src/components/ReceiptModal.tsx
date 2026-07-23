@@ -15,7 +15,41 @@ interface OrderItem {
   name: string;
   quantity: number;
   price: number;
+  /** Pre-formatted modifier line (legacy callers). */
   variationText?: string;
+  /** Structured snapshots from the order — preferred over variationText. */
+  variation?: Record<string, unknown> | null;
+  addons?: Record<string, unknown>[] | null;
+}
+
+/** Reads a display name out of a variation/add-on jsonb snapshot. */
+function snapshotName(v: Record<string, unknown> | null | undefined): string | null {
+  if (!v) return null;
+  const n = v["name"];
+  return typeof n === "string" && n.trim() ? n.trim() : null;
+}
+
+/**
+ * Builds the modifier lines printed under an item: the chosen variation and
+ * every selected add-on. Falls back to a caller-supplied variationText so
+ * older call sites keep working.
+ */
+function modifierLines(item: OrderItem): string[] {
+  const lines: string[] = [];
+  const variation = snapshotName(item.variation);
+  if (variation) lines.push(variation);
+  for (const a of item.addons ?? []) {
+    const name = snapshotName(a);
+    if (!name) continue;
+    const price = Number(a["price"]);
+    lines.push(
+      Number.isFinite(price) && price > 0
+        ? `+ ${name} (₦${price.toLocaleString()})`
+        : `+ ${name}`,
+    );
+  }
+  if (lines.length === 0 && item.variationText) lines.push(item.variationText);
+  return lines;
 }
 
 interface ReceiptModalProps {
@@ -27,6 +61,8 @@ interface ReceiptModalProps {
   tax: number;
   total: number;
   discount?: number;
+  /** Delivery fee for a delivery order — shown as its own line so the receipt totals add up. */
+  deliveryFee?: number;
   customerName?: string;
   tableNumber?: string;
   date?: Date;
@@ -41,11 +77,19 @@ const ReceiptModal = ({
   tax,
   total,
   discount = 0,
+  deliveryFee = 0,
   customerName,
   tableNumber,
   date = new Date(),
 }: ReceiptModalProps) => {
   const { data: info } = useReceiptInfo();
+  // Tax heading follows the business profile (e.g. "VAT (7.5%)"), instead of a
+  // hardcoded 7.5% that could contradict what the customer was actually charged.
+  const taxHeading = info
+    ? `${info.taxLabel ?? "Tax"} (${(Number(info.taxRate ?? 0) * 100)
+        .toFixed(2)
+        .replace(/\.?0+$/, "")}%)`
+    : "Tax";
   const sessionStaff = workstationAuth.getStaff();
   const staffName = sessionStaff
     ? `${sessionStaff.firstName} ${sessionStaff.lastName}`.trim()
@@ -65,41 +109,62 @@ const ReceiptModal = ({
         <head>
           <title>Receipt ${orderId}</title>
           <style>
-            @page { 
-              size: 80mm auto; 
-              margin: 0; 
+            @page {
+              size: 80mm auto;
+              margin: 0;
             }
             * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { 
-              font-family: 'Courier New', Consolas, monospace; 
-              font-size: 12px; 
-              padding: 8mm;
+
+            /* Thermal legibility rules (client: printout was faint / grey text
+               invisible). A thermal head is 1-bit — any grey dithers into
+               sparse dots that read faint and fade fast. So: force EVERY glyph
+               to solid black, print bold, and tell the browser not to lighten
+               anything. The receipt DOM is copied from the app and still
+               carries its muted-grey utility classes, hence the !important
+               catch-all rather than trusting each element's own colour. */
+            html, body, body * {
+              color: #000 !important;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+            body {
+              /* A heavier sans-serif keeps solid strokes at the printer's low
+                 resolution far better than thin monospace; columns still align
+                 because every row is laid out with flex, not spacing. */
+              font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif;
+              font-size: 13px;
+              font-weight: 700;
+              line-height: 1.4;
+              padding: 6mm 5mm;
               max-width: 80mm;
               margin: 0 auto;
-              background: white;
-              color: black;
+              background: #fff;
+              -webkit-font-smoothing: none;
             }
             .receipt-header { text-align: center; margin-bottom: 12px; }
-            .receipt-header h3 { font-size: 18px; font-weight: bold; margin-bottom: 4px; }
-            .receipt-header p { font-size: 10px; color: #555; }
-            .separator { border-top: 1px dashed #333; margin: 8px 0; }
+            .receipt-header h3 { font-size: 21px; font-weight: 800; letter-spacing: 0.5px; margin-bottom: 5px; }
+            /* Was 10px grey — the address/phone the client couldn't see. */
+            .receipt-header p { font-size: 12px; font-weight: 700; margin-bottom: 1px; }
+            .separator { border: 0; border-top: 2px solid #000; margin: 8px 0; }
             .order-info { margin-bottom: 8px; }
-            .order-info div { display: flex; justify-content: space-between; margin-bottom: 2px; font-size: 11px; }
+            .order-info div { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 3px; font-size: 12.5px; font-weight: 700; }
             .items { margin-bottom: 8px; }
-            .item { margin-bottom: 6px; }
-            .item-row { display: flex; justify-content: space-between; }
-            .item-variation { font-size: 10px; color: #666; margin-left: 12px; }
+            .item { margin-bottom: 7px; }
+            .item-row { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 700; }
+            .item-row > span:first-child { flex: 1; }
+            .item-row > span:last-child { white-space: nowrap; }
+            .item-variation { font-size: 11.5px; margin-left: 12px; font-weight: 700; }
             .totals { margin-bottom: 8px; }
-            .totals div { display: flex; justify-content: space-between; margin-bottom: 2px; font-size: 11px; }
-            .totals .total-row { font-weight: bold; font-size: 14px; margin-top: 6px; padding-top: 6px; border-top: 1px solid #333; }
-            .discount { color: #16a34a; }
+            .totals div { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 3px; font-size: 12.5px; font-weight: 700; }
+            .totals .total-row { font-weight: 800; font-size: 17px; margin-top: 6px; padding-top: 6px; border-top: 2px solid #000; }
             .qr-placeholder { text-align: center; margin: 12px 0; }
-            .qr-box { width: 50px; height: 50px; border: 1px solid #333; margin: 0 auto 4px; display: flex; align-items: center; justify-content: center; font-size: 9px; }
-            .footer { text-align: center; font-size: 10px; color: #555; margin-top: 12px; }
+            .qr-box { width: 56px; height: 56px; margin: 0 auto 4px; display: flex; align-items: center; justify-content: center; }
+            .qr-box svg { width: 100%; height: 100%; stroke: #000 !important; }
+            .footer { text-align: center; font-size: 12px; margin-top: 12px; font-weight: 700; }
             @media print {
-              body { padding: 0; }
-              html, body { 
-                width: 80mm; 
+              body { padding: 4mm 4mm 6mm; }
+              html, body {
+                width: 80mm;
                 height: auto;
               }
             }
@@ -137,7 +202,7 @@ const ReceiptModal = ({
           </DialogTitle>
         </DialogHeader>
 
-        <div ref={receiptRef} className="bg-card border border-border rounded-lg p-4 font-mono text-sm">
+        <div ref={receiptRef} className="bg-card border border-border rounded-lg p-4 font-mono text-sm font-semibold">
           {/* Header */}
           <div className="receipt-header text-center mb-4">
             <h3 className="font-bold text-lg text-foreground">
@@ -202,9 +267,11 @@ const ReceiptModal = ({
                   </span>
                   <span className="text-foreground">₦{(item.price * item.quantity).toLocaleString()}</span>
                 </div>
-                {item.variationText && (
-                  <p className="item-variation text-xs text-muted-foreground ml-4">{item.variationText}</p>
-                )}
+                {modifierLines(item).map((line, i) => (
+                  <p key={i} className="item-variation text-xs text-muted-foreground ml-4">
+                    {line}
+                  </p>
+                ))}
               </div>
             ))}
           </div>
@@ -223,8 +290,14 @@ const ReceiptModal = ({
                 <span>-₦{discount.toLocaleString()}</span>
               </div>
             )}
+            {deliveryFee > 0 && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Delivery:</span>
+                <span className="text-foreground">₦{deliveryFee.toLocaleString()}</span>
+              </div>
+            )}
             <div className="flex justify-between">
-              <span className="text-muted-foreground">VAT (7.5%):</span>
+              <span className="text-muted-foreground">{taxHeading}:</span>
               <span className="text-foreground">₦{tax.toLocaleString()}</span>
             </div>
             <Separator className="my-2 separator" />

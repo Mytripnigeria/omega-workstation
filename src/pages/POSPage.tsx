@@ -29,6 +29,7 @@ import {
   Star,
   Keyboard,
   HelpCircle,
+  MapPin,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -79,6 +80,8 @@ import {
   openPaystackCheckout,
 } from "@/services/paystack";
 import CategoryLoadError from "@/components/CategoryLoadError";
+import { useReceiptInfo } from "@/hooks/useReceiptInfo";
+import { useDeliveryRegions } from "@/hooks/useDeliveryRegions";
 
 interface Variation {
   id: string;
@@ -142,6 +145,11 @@ interface IncomingOrderItem {
 
 interface IncomingOrder {
   id: string;
+  /** Real money fields from the order, so the receipt never back-derives them. */
+  subtotal?: number;
+  taxAmount?: number;
+  discountAmount?: number;
+  deliveryFee?: number;
   /** Real backend order UUID (the display `id` is the #orderNumber label). */
   backendId?: string;
   source: "pos" | "website" | "ubereats" | "deliveroo" | "selfservice";
@@ -539,6 +547,16 @@ const POSPage = () => {
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
   
   const [orderType, setOrderType] = useState<"dine-in" | "takeaway" | "delivery">("dine-in");
+  // Delivery details captured at the counter. The region is what prices the
+  // delivery — the backend re-reads its fee, the POS never sets a price.
+  const [deliveryRegionId, setDeliveryRegionId] = useState<string>("");
+  const [deliveryAddress, setDeliveryAddress] = useState("");
+  // The tender the customer is paying with. Chosen BEFORE the order is
+  // proceeded with — it tells the system what method the money came through.
+  // (It used to be that clicking a method button both created the order and
+  // recorded the payment, so there was no way to just say "they're paying cash"
+  // and then process the bill.)
+  const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState<string>("");
   const [customerName, setCustomerName] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [payingWithPaystack, setPayingWithPaystack] = useState(false);
@@ -548,11 +566,29 @@ const POSPage = () => {
   const currentStaffId = sessionStaff?.id ?? "";
   const isManager = !!sessionStaff?.permissions?.includes("manage_orders");
 
+  // Business receipt settings carry the tax rate the counter must price with.
+  const { data: receiptInfo } = useReceiptInfo();
+
+  // Delivery regions for this store — the source of the delivery fee.
+  const { data: deliveryRegions = [] } = useDeliveryRegions(
+    { storeId: sessionStaff?.storeId },
+    { enabled: !!sessionStaff?.storeId },
+  );
+
   // Payment options come from the merchant's enabled methods for this channel
   // (Counter POS = `pos`, Self-Service = `self`), not a hardcoded Cash/Card pair.
   const { data: enabledPaymentMethods = [] } = useEnabledPaymentMethods(
     posMode === "selfservice" ? "self" : "pos",
   );
+
+  // Default the tender to the merchant's first enabled method so the cashier
+  // always has a valid selection without an extra tap.
+  useEffect(() => {
+    if (selectedPaymentMethodId) return;
+    const first = enabledPaymentMethods[0];
+    if (first) setSelectedPaymentMethodId(first.id);
+  }, [enabledPaymentMethods, selectedPaymentMethodId]);
+
 
   const playBeep = useBeepSound();
 
@@ -618,19 +654,43 @@ const POSPage = () => {
     [posMode],
   );
 
+  // A product is sellable on this channel only if BOTH it and its category were
+  // enabled for the channel by the merchant. Items with no (or an unresolvable)
+  // category are kept — they'd otherwise vanish from the "All" view entirely.
+  const categoryChannelById = useMemo(() => {
+    const m = new Map<string, boolean>();
+    for (const c of menuCategories) {
+      m.set(c.id, c.isActive !== false && isVisibleOnChannel(c.visibility));
+    }
+    return m;
+  }, [menuCategories, isVisibleOnChannel]);
+
   const channelItems = useMemo(
-    () => menuItems.filter((i) => isVisibleOnChannel(i.visibility)),
-    [menuItems, isVisibleOnChannel],
+    () =>
+      menuItems.filter(
+        (i) =>
+          isVisibleOnChannel(i.visibility) &&
+          (!i.categoryId || (categoryChannelById.get(i.categoryId) ?? true)),
+      ),
+    [menuItems, isVisibleOnChannel, categoryChannelById],
   );
 
   // Only surface category pills that actually have a visible product, so every
   // populated category shows (fixing "missing categories") without empty pills.
+  // The category itself must also be enabled by the merchant for this channel —
+  // a category hidden from the storefront/self-order shouldn't appear here even
+  // if one of its products is visible.
   const visibleCategories = useMemo(() => {
     const withProducts = new Set(
       channelItems.map((i) => i.categoryId).filter((id): id is string => !!id),
     );
-    return menuCategories.filter((c) => withProducts.has(c.id));
-  }, [channelItems, menuCategories]);
+    return menuCategories.filter(
+      (c) =>
+        withProducts.has(c.id) &&
+        c.isActive !== false &&
+        isVisibleOnChannel(c.visibility),
+    );
+  }, [channelItems, menuCategories, isVisibleOnChannel]);
 
   const filteredItems = channelItems.filter((item) => {
     const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -677,8 +737,18 @@ const POSPage = () => {
   };
 
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const tax = (subtotal - discount) * 0.075;
-  const total = subtotal - discount + tax;
+  // Tax comes from the merchant's business profile, not a hardcoded 7.5%.
+  // Falls back to 0 until the setting loads so we never invent a charge.
+  const taxRate = Number(receiptInfo?.taxRate ?? 0);
+  const taxLabel = receiptInfo?.taxLabel ?? "Tax";
+  const tax = (subtotal - discount) * taxRate;
+  const selectedPaymentMethod = enabledPaymentMethods.find(
+    (m) => m.id === selectedPaymentMethodId,
+  );
+  const selectedRegion = deliveryRegions.find((r) => r.id === deliveryRegionId);
+  const deliveryFee =
+    orderType === "delivery" ? Number(selectedRegion?.fee ?? 0) : 0;
+  const total = subtotal - discount + tax + deliveryFee;
 
   // Submit the cart to the backend as a real Order. Returns the API order
   // plus the displayable IncomingOrder used by the receipt modal.
@@ -696,8 +766,13 @@ const POSPage = () => {
         channel: posMode === "selfservice" ? "website" : "pos",
         isDelivery,
         customerName: customerName || undefined,
-        tableNumber: orderType === "dine-in" ? undefined : undefined,
         notes: extraNotes,
+        // The backend prices the delivery from the region; we only say which.
+        deliveryRegionId: isDelivery ? deliveryRegionId || undefined : undefined,
+        deliveryAddress:
+          isDelivery && deliveryAddress.trim()
+            ? { line1: deliveryAddress.trim() }
+            : undefined,
         taxAmount: tax,
         discountAmount: discount,
         quickBill: billType === "quick" || undefined,
@@ -722,8 +797,16 @@ const POSPage = () => {
           name: i.name,
           quantity: i.quantity,
           price: Number(i.unitPrice),
+          // Carry the snapshots through so the receipt can print the chosen
+          // variation and add-ons instead of just the base product name.
+          variation: i.variation ?? null,
+          addons: i.addons ?? null,
         })),
         total: Number(order.total),
+        subtotal: Number(order.subtotal),
+        taxAmount: Number(order.taxAmount),
+        deliveryFee: Number(order.deliveryFee ?? 0),
+        discountAmount: Number(order.discountAmount),
         time: "Just now",
         startTime: new Date(order.createdAt),
         estimatedMinutes: 15,
@@ -1479,13 +1562,40 @@ const POSPage = () => {
             </Select>
             <div className="relative">
               <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input 
-                placeholder="Customer name (optional)" 
-                value={customerName} 
+              <Input
+                placeholder="Customer name (optional)"
+                value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
                 className="pl-11 h-11 rounded-xl"
               />
             </div>
+            {/* Delivery orders need somewhere to send the rider and a region —
+                the region is what sets the delivery fee. */}
+            {orderType === "delivery" && (
+              <>
+                <Select value={deliveryRegionId} onValueChange={setDeliveryRegionId}>
+                  <SelectTrigger className="w-full h-11 rounded-xl">
+                    <SelectValue placeholder="Delivery region" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {deliveryRegions.map((r) => (
+                      <SelectItem key={r.id} value={r.id}>
+                        {r.name} — ₦{Number(r.fee).toLocaleString()}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="relative">
+                  <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Delivery address"
+                    value={deliveryAddress}
+                    onChange={(e) => setDeliveryAddress(e.target.value)}
+                    className="pl-11 h-11 rounded-xl"
+                  />
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -1565,8 +1675,14 @@ const POSPage = () => {
                     <span>-₦{discount.toLocaleString()}</span>
                   </div>
                 )}
+                {deliveryFee > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Delivery</span>
+                    <span className="text-foreground">₦{deliveryFee.toLocaleString()}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Tax</span>
+                  <span className="text-muted-foreground">{taxLabel}</span>
                   <span className="text-foreground">₦{Math.round(tax).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between font-bold text-lg pt-2 border-t border-border">
@@ -1602,7 +1718,10 @@ const POSPage = () => {
                   Process Bill
                 </Button>
               </div>
-              <div className="flex items-center gap-2">
+              {/* Payment method is a SELECTION made before proceeding — it
+                  records what the customer is paying through. Picking one no
+                  longer submits the order on its own. */}
+              <div className="flex items-center gap-2 mb-2">
                 <Button variant="outline" className="h-11 rounded-xl px-3 flex-shrink-0" disabled={cart.length === 0} onClick={holdOrder} title="Hold order">
                   <Pause className="w-4 h-4" />
                 </Button>
@@ -1619,10 +1738,10 @@ const POSPage = () => {
                   enabledPaymentMethods.map((m) => (
                     <Button
                       key={m.id}
-                      variant="outline"
+                      variant={selectedPaymentMethodId === m.id ? "default" : "outline"}
                       className="h-11 rounded-xl flex-1 min-w-0"
-                      disabled={cart.length === 0 || recordPaymentMutation.isPending}
-                      onClick={() => handleTakePayment(m)}
+                      onClick={() => setSelectedPaymentMethodId(m.id)}
+                      title={`Paying by ${m.label}`}
                     >
                       {paymentIcon(m.type)}
                       <span className="truncate ml-1">{m.label}</span>
@@ -1630,6 +1749,23 @@ const POSPage = () => {
                   ))
                 )}
               </div>
+              {enabledPaymentMethods.length > 0 && (
+                <Button
+                  className="w-full h-12 rounded-xl"
+                  disabled={
+                    cart.length === 0 ||
+                    !selectedPaymentMethod ||
+                    recordPaymentMutation.isPending
+                  }
+                  onClick={() =>
+                    selectedPaymentMethod && handleTakePayment(selectedPaymentMethod)
+                  }
+                >
+                  <Wallet className="w-4 h-4 mr-2" />
+                  Take Payment
+                  {selectedPaymentMethod ? ` • ${selectedPaymentMethod.label}` : ""}
+                </Button>
+              )}
             </>
           )}
 
@@ -1768,8 +1904,8 @@ const POSPage = () => {
       <ToastNotification open={toast.open} onClose={() => setToast({ ...toast, open: false })} type={toast.type} title={toast.title} message={toast.message} />
       <DiscountModal open={showDiscountModal} onClose={() => setShowDiscountModal(false)} subtotal={subtotal} onApplyDiscount={setDiscount} />
       <OrderHistoryModal open={showHistoryModal} onClose={() => setShowHistoryModal(false)} />
-      {currentReceipt && <ReceiptModal open={showReceiptModal} onClose={() => { setShowReceiptModal(false); setCurrentReceipt(null); setSelfServiceReceipt(null); }} orderId={currentReceipt.id} items={currentReceipt.items} subtotal={currentReceipt.total * 0.925} tax={currentReceipt.total * 0.075} total={currentReceipt.total} customerName={currentReceipt.customerName} />}
-      {selfServiceReceipt && !currentReceipt && <ReceiptModal open={showReceiptModal} onClose={() => { setShowReceiptModal(false); setSelfServiceReceipt(null); }} orderId={selfServiceReceipt.id} items={selfServiceReceipt.items} subtotal={selfServiceReceipt.total * 0.925} tax={selfServiceReceipt.total * 0.075} total={selfServiceReceipt.total} customerName={selfServiceReceipt.customerName} />}
+      {currentReceipt && <ReceiptModal open={showReceiptModal} onClose={() => { setShowReceiptModal(false); setCurrentReceipt(null); setSelfServiceReceipt(null); }} orderId={currentReceipt.id} items={currentReceipt.items} subtotal={currentReceipt.subtotal ?? currentReceipt.total} tax={currentReceipt.taxAmount ?? 0} discount={currentReceipt.discountAmount ?? 0} deliveryFee={currentReceipt.deliveryFee ?? 0} total={currentReceipt.total} customerName={currentReceipt.customerName} />}
+      {selfServiceReceipt && !currentReceipt && <ReceiptModal open={showReceiptModal} onClose={() => { setShowReceiptModal(false); setSelfServiceReceipt(null); }} orderId={selfServiceReceipt.id} items={selfServiceReceipt.items} subtotal={selfServiceReceipt.subtotal ?? selfServiceReceipt.total} tax={selfServiceReceipt.taxAmount ?? 0} discount={selfServiceReceipt.discountAmount ?? 0} deliveryFee={selfServiceReceipt.deliveryFee ?? 0} total={selfServiceReceipt.total} customerName={selfServiceReceipt.customerName} />}
       
       {/* Order Notification Popup */}
       <OrderNotificationPopup 
