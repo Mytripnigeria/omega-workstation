@@ -87,6 +87,7 @@ const LobbyPage = () => {
   const channelIcon = (channel: Order["channel"]) => {
     if (channel === "pos") return <Monitor className="w-3 h-3" />;
     if (channel === "website") return <Globe className="w-3 h-3" />;
+    if (channel === "chowdeck") return <Bike className="w-3 h-3" />;
     return <Globe className="w-3 h-3" />;
   };
 

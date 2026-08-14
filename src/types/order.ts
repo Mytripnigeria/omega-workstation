@@ -9,7 +9,9 @@ export type OrderStatus =
   | "completed"
   | "cancelled";
 
-export type OrderChannel = "pos" | "website" | "phone";
+// `chowdeck` = an order placed on the Chowdeck marketplace and delivered
+// to us by webhook; it behaves like any other incoming order in the POS.
+export type OrderChannel = "pos" | "website" | "phone" | "chowdeck";
 export type PrepStatus = "pending" | "preparing" | "ready";
 
 export interface OrderItem {
@@ -40,6 +42,8 @@ export interface Order {
   customerPhone: string | null;
   tableNumber: string | null;
   channel: OrderChannel;
+  /** The marketplace's own reference, when the order came from one. */
+  externalReference?: string | null;
   isDelivery: boolean;
   status: OrderStatus;
   subtotal: number;

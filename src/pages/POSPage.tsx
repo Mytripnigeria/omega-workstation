@@ -163,7 +163,7 @@ interface IncomingOrder {
   deliveryFee?: number;
   /** Real backend order UUID (the display `id` is the #orderNumber label). */
   backendId?: string;
-  source: "pos" | "website" | "ubereats" | "deliveroo" | "selfservice";
+  source: "pos" | "website" | "ubereats" | "deliveroo" | "selfservice" | "chowdeck";
   customerName: string;
   items: IncomingOrderItem[];
   total: number;
@@ -421,7 +421,12 @@ const POSPage = () => {
     backendId: o.id,
     // The POS receipt UI only distinguishes pos/website/ubereats/deliveroo/selfservice;
     // phone-channel orders surface in the POS workflow indistinguishably from in-store.
-    source: o.channel === "website" ? "website" : "pos",
+    source:
+      o.channel === "website"
+        ? "website"
+        : o.channel === "chowdeck"
+          ? "chowdeck"
+          : "pos",
     customerName: o.customerName ?? "Walk-in",
     items: o.items.map((i) => ({
       name: i.name,
@@ -606,7 +611,7 @@ const POSPage = () => {
   const [orderNotification, setOrderNotification] = useState<{
     id: string;
     orderNumber: string;
-    source: "ubereats" | "deliveroo" | "website" | "selfservice";
+    source: "ubereats" | "deliveroo" | "website" | "selfservice" | "chowdeck";
     customerName: string;
     itemCount: number;
     total: number;
@@ -697,7 +702,7 @@ const POSPage = () => {
         prev ?? {
           id: o.id,
           orderNumber: `#${o.orderNumber}`,
-          source: "website",
+          source: o.channel === "chowdeck" ? "chowdeck" : "website",
           customerName: o.customerName ?? "Walk-in",
           itemCount: o.items.reduce((sum, i) => sum + i.quantity, 0),
           total: Number(o.total),

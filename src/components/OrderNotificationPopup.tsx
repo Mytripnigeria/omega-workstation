@@ -7,7 +7,7 @@ import { useContinuousBeep } from "@/hooks/useBeepSound";
 interface OrderNotification {
   id: string;
   orderNumber: string;
-  source: "ubereats" | "deliveroo" | "website" | "selfservice";
+  source: "ubereats" | "deliveroo" | "website" | "selfservice" | "chowdeck";
   customerName: string;
   itemCount: number;
   total: number;
@@ -51,6 +51,7 @@ const OrderNotificationPopup = ({ notification, onDismiss, onViewOrder }: OrderN
     switch (source) {
       case "ubereats":
       case "deliveroo":
+      case "chowdeck":
         return <Smartphone className="w-5 h-5" />;
       case "website":
         return <Globe className="w-5 h-5" />;
@@ -64,6 +65,7 @@ const OrderNotificationPopup = ({ notification, onDismiss, onViewOrder }: OrderN
       case "ubereats": return "Uber Eats";
       case "deliveroo": return "Deliveroo";
       case "website": return "Website";
+      case "chowdeck": return "Chowdeck";
       case "selfservice": return "Self Service";
     }
   };
