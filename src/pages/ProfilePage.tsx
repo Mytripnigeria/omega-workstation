@@ -27,6 +27,7 @@ import { useNavigate } from "react-router-dom";
 import ActivityLogButton from "@/components/ActivityLogButton";
 import ActivityLog from "@/components/ActivityLog";
 import { useMyPayslips } from "@/hooks/usePayslips";
+import { staffPreferencesService } from "@/services/staff-preferences";
 
 interface PayslipEntry {
   id: string;
@@ -41,6 +42,11 @@ const ProfilePage = () => {
   const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [showPinModal, setShowPinModal] = useState(false);
+  const [currentPin, setCurrentPin] = useState("");
+  const [newPin, setNewPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [pinSaving, setPinSaving] = useState(false);
   const [showActivityLog, setShowActivityLog] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean;
@@ -48,6 +54,46 @@ const ProfilePage = () => {
     description: string;
     onConfirm: () => void;
   }>({ open: false, title: "", description: "", onConfirm: () => {} });
+
+  const closePinModal = () => {
+    setShowPinModal(false);
+    setCurrentPin("");
+    setNewPin("");
+    setConfirmPin("");
+    setPinError(null);
+  };
+
+  /** Validates locally, then actually changes the PIN on the server. */
+  const submitPinChange = async () => {
+    if (!/^\d{4}$/.test(currentPin)) {
+      setPinError("Enter your current 4-digit PIN");
+      return;
+    }
+    if (!/^\d{4}$/.test(newPin)) {
+      setPinError("New PIN must be exactly 4 digits");
+      return;
+    }
+    if (newPin !== confirmPin) {
+      setPinError("New PIN and confirmation don't match");
+      return;
+    }
+    setPinError(null);
+    setPinSaving(true);
+    try {
+      await staffPreferencesService.changePin(currentPin, newPin);
+      closePinModal();
+      setConfirmDialog({
+        open: true,
+        title: "PIN Updated",
+        description: "Your login PIN has been changed successfully.",
+        onConfirm: () => setConfirmDialog((c) => ({ ...c, open: false })),
+      });
+    } catch (e) {
+      setPinError((e as Error).message ?? "Couldn't change your PIN");
+    } finally {
+      setPinSaving(false);
+    }
+  };
   const { data: payslipsPage } = useMyPayslips({ limit: 10 });
   const payslips: PayslipEntry[] = (payslipsPage?.data ?? []).map((p) => ({
     id: p.id,
@@ -321,7 +367,7 @@ const ProfilePage = () => {
       </Dialog>
 
       {/* Change PIN Modal */}
-      <Dialog open={showPinModal} onOpenChange={setShowPinModal}>
+      <Dialog open={showPinModal} onOpenChange={(o) => (o ? setShowPinModal(true) : closePinModal())}>
         <DialogContent className="rounded-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -332,34 +378,54 @@ const ProfilePage = () => {
           <div className="space-y-4 py-4">
             <div>
               <label className="text-sm text-muted-foreground mb-1 block">Current PIN</label>
-              <Input type="password" placeholder="••••" maxLength={4} className="rounded-xl" />
+              <Input
+                type="password"
+                inputMode="numeric"
+                placeholder="••••"
+                maxLength={4}
+                className="rounded-xl"
+                value={currentPin}
+                onChange={(e) => setCurrentPin(e.target.value.replace(/\D/g, ""))}
+              />
             </div>
             <div>
               <label className="text-sm text-muted-foreground mb-1 block">New PIN</label>
-              <Input type="password" placeholder="••••" maxLength={4} className="rounded-xl" />
+              <Input
+                type="password"
+                inputMode="numeric"
+                placeholder="••••"
+                maxLength={4}
+                className="rounded-xl"
+                value={newPin}
+                onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ""))}
+              />
             </div>
             <div>
               <label className="text-sm text-muted-foreground mb-1 block">Confirm New PIN</label>
-              <Input type="password" placeholder="••••" maxLength={4} className="rounded-xl" />
+              <Input
+                type="password"
+                inputMode="numeric"
+                placeholder="••••"
+                maxLength={4}
+                className="rounded-xl"
+                value={confirmPin}
+                onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ""))}
+              />
             </div>
+            {pinError && (
+              <p className="text-sm text-status-error">{pinError}</p>
+            )}
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setShowPinModal(false)}>
+            <Button variant="outline" className="flex-1 rounded-xl" onClick={closePinModal}>
               Cancel
             </Button>
             <Button
               className="flex-1 rounded-xl"
-              onClick={() => {
-                setShowPinModal(false);
-                setConfirmDialog({
-                  open: true,
-                  title: "PIN Updated",
-                  description: "Your login PIN has been changed successfully.",
-                  onConfirm: () => setConfirmDialog({ ...confirmDialog, open: false }),
-                });
-              }}
+              disabled={pinSaving}
+              onClick={() => void submitPinChange()}
             >
-              Update PIN
+              {pinSaving ? "Updating…" : "Update PIN"}
             </Button>
           </div>
         </DialogContent>

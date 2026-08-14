@@ -23,6 +23,15 @@ export function useStoreActiveCashSessions(enabled: boolean) {
   });
 }
 
+/** Register history for the current store — read-only (Managers board). */
+export function useCashSessions(params: { status?: string; limit?: number } = {}) {
+  return useQuery({
+    queryKey: ["cash-session", "list", params],
+    queryFn: () => cashSessionsService.list(params),
+    staleTime: 30 * 1000,
+  });
+}
+
 export function useJoinCashSession() {
   const qc = useQueryClient();
   return useMutation({

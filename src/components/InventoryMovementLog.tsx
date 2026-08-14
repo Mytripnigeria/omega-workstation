@@ -167,15 +167,32 @@ const InventoryMovementLog = ({ ingredientId }: InventoryMovementLogProps) => {
     {
       key: "balance",
       label: "Balance",
-      render: (m: IngredientMovement) => (
-        <div className="text-sm">
-          <span className="text-muted-foreground">{m.previousStock}</span>
-          <span className="mx-1 text-muted-foreground">→</span>
-          <span className="font-semibold text-foreground">
-            {m.newStock} {m.ingredientUnit ?? ""}
-          </span>
-        </div>
-      ),
+      // Balance at the location the movement landed on — the ingredient-wide
+      // totals don't say which store/station changed. Older rows have no
+      // per-location figures, so those fall back to the totals.
+      render: (m: IngredientMovement) => {
+        const hasLocationFigures =
+          m.locationPreviousStock !== null && m.locationNewStock !== null;
+        const before = hasLocationFigures ? m.locationPreviousStock : m.previousStock;
+        const after = hasLocationFigures ? m.locationNewStock : m.newStock;
+        return (
+          <div className="text-sm">
+            <span className="text-muted-foreground">{before}</span>
+            <span className="mx-1 text-muted-foreground">→</span>
+            <span className="font-semibold text-foreground">
+              {after} {m.ingredientUnit ?? ""}
+            </span>
+            {m.locationName && (
+              <span className="block text-xs text-muted-foreground">
+                {m.locationName}
+                {m.locationType
+                  ? ` (${m.locationType === "outstore" ? "Outstore" : "Instore"})`
+                  : ""}
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: "details",

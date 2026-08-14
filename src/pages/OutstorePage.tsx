@@ -144,12 +144,22 @@ const OutstorePage = () => {
 
   const ingredients = useMemo(() => page?.data ?? [], [page]);
 
-  const filteredItems = ingredients.filter((i) =>
-    !searchQuery
-      ? true
-      : i.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (i.sku ?? "").toLowerCase().includes(searchQuery.toLowerCase()),
-  );
+  const filteredItems = ingredients.filter((i) => {
+    // "All locations" means every OUT-STORE location, not every location in the
+    // store: an item stocked only in-store has no business on this board.
+    // Picking a specific location is already filtered server-side. Items with
+    // no location rows at all (legacy, pre-multi-location) are kept so they
+    // stay reachable rather than silently disappearing.
+    if (locationId === ALL) {
+      const hasRows = (i.locations ?? []).length > 0;
+      if (hasRows && outstoreRowsOf(i).length === 0) return false;
+    }
+    if (!searchQuery) return true;
+    return (
+      i.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (i.sku ?? "").toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  });
 
   const adjustStock = useAdjustStock();
   const transfer = useTransferToLocation();

@@ -7,12 +7,16 @@ import type {
   PrepStatus,
 } from "@/types/order";
 
+// React Query pauses `refetchInterval` whenever the window loses focus. The
+// kitchen and delivery boards run unattended on wall screens, and their
+// new-order alarm can only fire if polling keeps running while unfocused.
 export function useOrders(filter: OrderFilter = {}, refetchInterval?: number) {
   return useQuery({
     queryKey: ["orders", filter],
     queryFn: () => ordersService.list(filter),
     staleTime: 5 * 1000,
     refetchInterval,
+    refetchIntervalInBackground: true,
   });
 }
 

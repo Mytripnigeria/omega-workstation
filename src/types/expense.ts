@@ -9,6 +9,20 @@ export type ExpenseCategory =
   | "salaries"
   | "other";
 
+/** `purchase` = stock bought in; `expense` = money spent. */
+export type ExpenseItemType = "purchase" | "expense";
+
+export interface ExpenseItem {
+  name: string;
+  type: ExpenseItemType;
+  unit: string | null;
+  quantity: number;
+  unitPrice: number;
+  /** quantity × unitPrice, computed server-side. */
+  total: number;
+  supplier: string | null;
+}
+
 export interface Expense {
   id: string;
   businessId: string;
@@ -18,7 +32,10 @@ export interface Expense {
   category: ExpenseCategory;
   amount: number;
   currency: string;
-  description: string;
+  description: string | null;
+  /** Line items making up the submission; null for legacy free-text ones. */
+  items: ExpenseItem[] | null;
+  supplierName: string | null;
   receiptFileId: string | null;
   receiptUrl: string | null;
   status: ExpenseStatus;
@@ -44,10 +61,23 @@ export interface ExpenseFilter {
   limit?: number;
 }
 
+/** One line of a submission, as posted. `total` is computed server-side. */
+export interface CreateExpenseItemInput {
+  name: string;
+  type: ExpenseItemType;
+  unit?: string | null;
+  quantity: number;
+  unitPrice: number;
+  supplier?: string | null;
+}
+
 export interface CreateExpenseInput {
   category: ExpenseCategory;
-  amount: number;
+  /** Ignored when `items` are supplied — the total is summed from them. */
+  amount?: number;
   currency?: string;
-  description: string;
+  description?: string;
+  items?: CreateExpenseItemInput[];
+  supplierName?: string;
   receiptFileId?: string;
 }

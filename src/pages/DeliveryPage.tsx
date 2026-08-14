@@ -39,6 +39,7 @@ import { useFunctionAccess } from "@/hooks/useFunctionAccess";
 import { canAccessFunction } from "@/lib/roles";
 import FunctionRestricted from "@/components/FunctionRestricted";
 import type { Delivery } from "@/types/delivery";
+import { toLocalISODate } from "@/lib/date-range";
 
 const DeliveryPage = () => {
   const navigate = useNavigate();
@@ -78,7 +79,7 @@ const DeliveryPage = () => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const { data: completedPage } = useMyDeliveries(
-    { status: "delivered,failed", dateFrom: today.toISOString().split("T")[0], limit: 50 },
+    { status: "delivered,failed", dateFrom: toLocalISODate(today), limit: 50 },
     15000,
   );
 

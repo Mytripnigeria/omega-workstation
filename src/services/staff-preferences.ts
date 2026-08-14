@@ -23,4 +23,11 @@ export const staffPreferencesService = {
       method: "PATCH",
       body: JSON.stringify(patch),
     }),
+
+  /** Change the staff member's own workstation login PIN. */
+  changePin: (currentPin: string, newPin: string): Promise<void> =>
+    workstationApi.request<void>("/staff/me/pin", {
+      method: "PATCH",
+      body: JSON.stringify({ currentPin, newPin }),
+    }),
 };

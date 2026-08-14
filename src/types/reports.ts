@@ -65,5 +65,5 @@ export interface ReportsRange {
 }
 
 export interface SalesReportFilter extends ReportsRange {
-  groupBy?: "day" | "week" | "month";
+  groupBy?: "hour" | "day" | "week" | "month";
 }

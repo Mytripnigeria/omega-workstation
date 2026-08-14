@@ -18,6 +18,19 @@ export function useStaffPerformance(filter: ReportsRange = {}) {
   });
 }
 
+/**
+ * Popularity ranking for the POS menu. Cached for five minutes — the ordering
+ * only needs to be roughly right, and it must not add load to every POS poll.
+ */
+export function useProductPopularity(enabled = true) {
+  return useQuery({
+    queryKey: ["reports", "product-popularity"],
+    queryFn: () => reportsService.productPopularity(),
+    staleTime: 5 * 60 * 1000,
+    enabled,
+  });
+}
+
 export function useKitchenStats(filter: ReportsRange = {}) {
   return useQuery({
     queryKey: ["reports", "kitchen", filter],

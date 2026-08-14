@@ -37,6 +37,25 @@ interface ItemDetailsProps {
   } | null;
 }
 
+/**
+ * "was 10 in Main store (Instore) → now 15 in Main store (Instore)".
+ *
+ * Reports the figures for the location the movement actually landed on, so the
+ * merchant can tell which of their stores/stations the record is about. Falls
+ * back to the ingredient-wide totals for movements recorded before per-location
+ * figures were captured.
+ */
+function movementStockLabel(m: IngredientMovement): string {
+  const at = m.locationName
+    ? ` in ${m.locationName}${m.locationType ? ` (${m.locationType === "outstore" ? "Outstore" : "Instore"})` : ""}`
+    : "";
+  const hasLocationFigures =
+    m.locationPreviousStock !== null && m.locationNewStock !== null;
+  const before = hasLocationFigures ? m.locationPreviousStock : m.previousStock;
+  const after = hasLocationFigures ? m.locationNewStock : m.newStock;
+  return `(was ${before}${at} → now ${after}${at})`;
+}
+
 const ItemDetailsModal = ({ open, onClose, item }: ItemDetailsProps) => {
   const [activeTab, setActiveTab] = useState("overview");
 
@@ -247,7 +266,7 @@ const ItemDetailsModal = ({ open, onClose, item }: ItemDetailsProps) => {
                         {m.quantity > 0 ? "+" : ""}
                         {m.quantity} {item.unit}
                         <span className="text-muted-foreground ml-2">
-                          (was {m.previousStock} → now {m.newStock})
+                          {movementStockLabel(m)}
                         </span>
                       </p>
                       {m.referenceType && m.referenceId && (

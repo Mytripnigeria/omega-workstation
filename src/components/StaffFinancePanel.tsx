@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { useStaffPerformance } from "@/hooks/useReports";
 import { useShifts } from "@/hooks/useShifts";
+import { toLocalISODate } from "@/lib/date-range";
 
 interface StaffFinancePanelProps {
   currentStaffId: string;
@@ -34,8 +35,8 @@ const StaffFinancePanel = ({
   today.setHours(0, 0, 0, 0);
   const range = useMemo(
     () => ({
-      dateFrom: today.toISOString().split("T")[0],
-      dateTo: new Date().toISOString().split("T")[0],
+      dateFrom: toLocalISODate(today),
+      dateTo: toLocalISODate(),
     }),
     [],
   );

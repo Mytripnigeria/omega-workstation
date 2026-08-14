@@ -8,6 +8,7 @@ import CustomerInstructionsModal from "@/components/CustomerInstructionsModal";
 import ActivityLogButton from "@/components/ActivityLogButton";
 import ActivityLog from "@/components/ActivityLog";
 import { useOrders, useUpdateItemPrep, useUpdateOrderStatus } from "@/hooks/useOrders";
+import { unlockAudio, useNewItemAlert } from "@/hooks/useBeepSound";
 import { useFunctionAccess } from "@/hooks/useFunctionAccess";
 import { canAccessFunction } from "@/lib/roles";
 import FunctionRestricted from "@/components/FunctionRestricted";
@@ -118,12 +119,14 @@ const KitchenPage = () => {
     : "";
 
   // Live data. Active board = pending/preparing/ready; recently completed =
-  // served (kitchen-side handoff history that can be recalled).
+  // the kitchen-side handoff history that can be recalled.
   const { data: activePage } = useOrders(
     { status: "pending,preparing,ready", limit: 50 },
     5000,
   );
-  const { data: recentPage } = useOrders({ status: "served", limit: 10 }, 10000);
+  // Both statuses: newly finished orders are COMPLETED, while orders finished
+  // before that fix (and dine-in orders a waiter served) are SERVED.
+  const { data: recentPage } = useOrders({ status: "served,completed", limit: 10 }, 10000);
 
   const updateItemPrep = useUpdateItemPrep();
   const updateOrderStatusMutation = useUpdateOrderStatus();
@@ -155,6 +158,9 @@ const KitchenPage = () => {
       try {
         if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
         if (audioCtxRef.current.state === "suspended") void audioCtxRef.current.resume();
+        // The new-order alert runs on the app's shared context, which needs the
+        // same gesture to leave the browser's "suspended" state.
+        unlockAudio();
       } catch {
         // Audio unavailable — the beep is best-effort only.
       }
@@ -268,6 +274,11 @@ const KitchenPage = () => {
   const onTimeOrders = preparingOrders.filter((o) => getRemainingSeconds(o) >= 0);
   const readyOrders = orders.filter((o) => o.status === "ready");
 
+  // A brand-new ticket landing on the board raises the same loud alert the
+  // delivery board uses — the kitchen previously only made a sound once an
+  // order was already late.
+  useNewItemAlert(newOrders.length);
+
   // Repeat a short beep while any order is late (prep overdue or pending too long).
   const anyLate = orders.some(isOrderLate);
 
@@ -279,9 +290,12 @@ const KitchenPage = () => {
       try {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-        osc.type = "sine";
+        // Square wave at high gain: the late-order warning has to carry across
+        // a working kitchen.
+        osc.type = "square";
         osc.frequency.value = 880;
-        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.9, ctx.currentTime + 0.02);
         gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
         osc.connect(gain);
         gain.connect(ctx.destination);
@@ -399,7 +413,7 @@ const KitchenPage = () => {
               </Button>
             )}
             {order.status === "ready" && (
-              <Button size="sm" variant="secondary" className="rounded-xl" onClick={() => changeStatus(order.id, "served", "completed")}>
+              <Button size="sm" variant="secondary" className="rounded-xl" onClick={() => changeStatus(order.id, "completed", "completed")}>
                 <CheckCircle2 className="w-4 h-4 mr-1" />
                 Complete
               </Button>

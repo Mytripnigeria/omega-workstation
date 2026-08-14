@@ -38,6 +38,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { toLocalISODate } from "@/lib/date-range";
 
 interface Staff {
   id: string;
@@ -112,7 +113,7 @@ const Dashboard = () => {
 
   // Active shift comes from real backend
   const { data: activeShift } = useActiveShift(currentStaff?.id);
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = toLocalISODate();
   const { data: todayShiftsPage } = useMyShifts(currentStaff?.id, todayStr, todayStr);
   const todayShift = todayShiftsPage?.data?.[0] ?? null;
   const clockIn = useClockIn();

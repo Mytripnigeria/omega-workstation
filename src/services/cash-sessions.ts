@@ -46,7 +46,26 @@ export interface CashSessionExpected {
   expectedTotal: number;
 }
 
+export interface CashSessionPage {
+  data: CashSession[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
 export const cashSessionsService = {
+  /**
+   * Register history for the staff member's own store (the backend scopes a
+   * staff token to its store). Read-only — used by the Managers board.
+   */
+  list: (params: { status?: string; limit?: number } = {}): Promise<CashSessionPage> => {
+    const qs = new URLSearchParams();
+    if (params.status) qs.set("status", params.status);
+    qs.set("limit", String(params.limit ?? 50));
+    return workstationApi.request<CashSessionPage>(`/cash-sessions?${qs.toString()}`);
+  },
+
   myActive: (): Promise<CashSession | null> =>
     workstationApi.request<CashSession | null>("/cash-sessions/me/active"),
 

@@ -2,12 +2,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { deliveriesService } from "@/services/deliveries";
 import type { CreateDeliveryInput, DeliveryFilter } from "@/types/delivery";
 
+// React Query pauses `refetchInterval` whenever the window loses focus. A
+// delivery tablet is usually on a stand next to another app, so the board went
+// stale exactly when it mattered — polling in the background keeps it live.
 export function useDeliveries(filter: DeliveryFilter = {}, refetchInterval?: number) {
   return useQuery({
     queryKey: ["deliveries", filter],
     queryFn: () => deliveriesService.list(filter),
     staleTime: 5 * 1000,
     refetchInterval,
+    refetchIntervalInBackground: true,
   });
 }
 
@@ -17,6 +21,7 @@ export function useMyDeliveries(filter: DeliveryFilter = {}, refetchInterval?: n
     queryFn: () => deliveriesService.listMy(filter),
     staleTime: 5 * 1000,
     refetchInterval,
+    refetchIntervalInBackground: true,
   });
 }
 

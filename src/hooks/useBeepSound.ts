@@ -25,6 +25,16 @@ export function unlockAudio(): void {
   }
 }
 
+/**
+ * How long an unacknowledged order alert keeps sounding. The client's rule:
+ * loud and continuous for 30 seconds unless someone acts on the order, so it
+ * can't be missed across a noisy kitchen — but it doesn't ring forever.
+ */
+export const ALERT_DURATION_MS = 30_000;
+
+/** Gap between repeats inside the alert window. */
+const ALERT_REPEAT_MS = 2_000;
+
 export const useBeepSound = () => {
   const playBeep = useCallback(() => {
     // Respect the staff member's beep preference (settable from /settings).
@@ -48,44 +58,73 @@ export const useBeepSound = () => {
   return playBeep;
 };
 
+/**
+ * A loud, repeating order alert.
+ *
+ * `startBeeping()` sounds an urgent pattern immediately, repeats it every two
+ * seconds, and stops itself after {@link ALERT_DURATION_MS}. Calling it again
+ * (another order arrives) restarts the window; `stopBeeping()` — wired to the
+ * dismiss/act handlers — silences it at once.
+ */
 export const useContinuousBeep = () => {
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const playNotificationTone = useCallback(() => {
+    if (!getCachedStaffPreference("beepEnabled")) return;
+
     const ctx = getAudioContext();
     if (ctx.state === "suspended") void ctx.resume();
+    if (ctx.state !== "running") return;
 
+    // A square wave carries much further than a sine at the same gain, which is
+    // what "noticeably unavoidable" needs on a busy floor. Each tone is ramped
+    // down rather than cut, so it reads as a siren instead of a click.
     const playTone = (frequency: number, startTime: number, duration: number) => {
-      const oscillator = ctx.createOscillator();
-      const gainNode = ctx.createGain();
-      oscillator.connect(gainNode);
-      gainNode.connect(ctx.destination);
-      oscillator.frequency.value = frequency;
-      oscillator.type = "sine";
-      gainNode.gain.value = 0.4;
-      oscillator.start(ctx.currentTime + startTime);
-      oscillator.stop(ctx.currentTime + startTime + duration);
+      try {
+        const oscillator = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+        oscillator.connect(gainNode);
+        gainNode.connect(ctx.destination);
+        oscillator.frequency.value = frequency;
+        oscillator.type = "square";
+        const at = ctx.currentTime + startTime;
+        gainNode.gain.setValueAtTime(0.0001, at);
+        gainNode.gain.exponentialRampToValueAtTime(0.9, at + 0.02);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, at + duration);
+        oscillator.start(at);
+        oscillator.stop(at + duration);
+      } catch {
+        // Fail silently — the board must keep working without sound.
+      }
     };
 
-    playTone(880, 0, 0.15);
-    playTone(1100, 0.2, 0.15);
-    playTone(880, 0.4, 0.15);
+    // Rising three-tone chime, repeated once, so a single alert lasts ~1.2s.
+    playTone(880, 0, 0.18);
+    playTone(1175, 0.22, 0.18);
+    playTone(1568, 0.44, 0.26);
+    playTone(880, 0.78, 0.18);
+    playTone(1175, 1.0, 0.18);
   }, []);
-
-  const startBeeping = useCallback(() => {
-    // Play immediately
-    playNotificationTone();
-    // Then repeat every 3 seconds
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    intervalRef.current = setInterval(playNotificationTone, 3000);
-  }, [playNotificationTone]);
 
   const stopBeeping = useCallback(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
   }, []);
+
+  const startBeeping = useCallback(() => {
+    stopBeeping();
+    playNotificationTone();
+    intervalRef.current = setInterval(playNotificationTone, ALERT_REPEAT_MS);
+    // Self-limiting: 30 seconds of alarm, then silence until the next order.
+    timeoutRef.current = setTimeout(stopBeeping, ALERT_DURATION_MS);
+  }, [playNotificationTone, stopBeeping]);
 
   useEffect(() => {
     return () => {
@@ -94,4 +133,26 @@ export const useContinuousBeep = () => {
   }, [stopBeeping]);
 
   return { startBeeping, stopBeeping };
+};
+
+/**
+ * Fires the loud alert whenever `count` rises — i.e. a genuinely *new* order
+ * landed on the board. Falling or unchanged counts stay silent, so working
+ * through a queue doesn't re-trigger the alarm.
+ */
+export const useNewItemAlert = (count: number, enabled = true) => {
+  const { startBeeping, stopBeeping } = useContinuousBeep();
+  const previousRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!enabled) return;
+    const previous = previousRef.current;
+    previousRef.current = count;
+    // Skip the first observation: arriving at a screen that already has orders
+    // waiting is not a new-order event.
+    if (previous === null) return;
+    if (count > previous) startBeeping();
+  }, [count, enabled, startBeeping]);
+
+  return { stopBeeping };
 };

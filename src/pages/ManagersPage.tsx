@@ -13,6 +13,7 @@ import {
   Receipt,
   Package,
   TrendingUp,
+  Wallet,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,8 @@ import {
 import { useShifts } from "@/hooks/useShifts";
 import { useActivityLog } from "@/hooks/useActivityLog";
 import { workstationAuth } from "@/services/api";
+import { useCashSessions } from "@/hooks/useCashSession";
+import { toLocalISODate } from "@/lib/date-range";
 
 const formatCurrency = (n: number) => `₦${Number(n).toLocaleString()}`;
 
@@ -41,9 +44,13 @@ const ManagersPage = () => {
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  // Read-only register history for the Registers tab.
+  const registers = useCashSessions({ limit: 50 });
+  const registerRows = registers.data?.data ?? [];
+
   const range = {
-    dateFrom: today.toISOString().split("T")[0],
-    dateTo: new Date().toISOString().split("T")[0],
+    dateFrom: toLocalISODate(today),
+    dateTo: toLocalISODate(),
   };
 
   const summary = useDashboardSummary(staff?.storeId);
@@ -147,6 +154,9 @@ const ManagersPage = () => {
             </TabsTrigger>
             <TabsTrigger value="staff" className="rounded-lg data-[state=active]:bg-card">
               Staff ({onShift.data?.data.length ?? 0})
+            </TabsTrigger>
+            <TabsTrigger value="registers" className="rounded-lg data-[state=active]:bg-card">
+              Registers
             </TabsTrigger>
             <TabsTrigger value="activity" className="rounded-lg data-[state=active]:bg-card">
               Activity
@@ -259,6 +269,101 @@ const ManagersPage = () => {
                         })}
                       </p>
                     )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* View-only register history for this store — managers can see how
+              each till opened and closed without being able to change it. */}
+          <TabsContent value="registers">
+            <div className="bg-card border border-border rounded-2xl p-5">
+              <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
+                <Wallet className="w-4 h-4" />
+                Registers
+              </h3>
+              {registers.isLoading && (
+                <p className="text-muted-foreground">Loading...</p>
+              )}
+              {!registers.isLoading && registerRows.length === 0 && (
+                <p className="text-muted-foreground py-8 text-center">
+                  No register sessions yet.
+                </p>
+              )}
+              <div className="space-y-3">
+                {registerRows.map((r) => (
+                  <div key={r.id} className="bg-secondary/30 rounded-xl p-4">
+                    <div className="flex items-start justify-between gap-3 mb-2 flex-wrap">
+                      <div>
+                        <p className="font-medium text-foreground">
+                          {r.counterName ?? "Register"} · {r.staffName}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Opened{" "}
+                          {new Date(r.openedAt).toLocaleString([], {
+                            day: "2-digit",
+                            month: "short",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                          {r.closedAt && (
+                            <>
+                              {" · Closed "}
+                              {new Date(r.closedAt).toLocaleString([], {
+                                day: "2-digit",
+                                month: "short",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </>
+                          )}
+                        </p>
+                      </div>
+                      <Badge
+                        className={
+                          r.status === "open"
+                            ? "bg-status-success/10 text-status-success"
+                            : "bg-secondary text-muted-foreground"
+                        }
+                      >
+                        {r.status}
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Opening float</p>
+                        <p className="font-medium text-foreground">
+                          {formatCurrency(r.openingFloat)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Expected</p>
+                        <p className="font-medium text-foreground">
+                          {formatCurrency(r.expectedTotal)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Counted</p>
+                        <p className="font-medium text-foreground">
+                          {r.status === "open" ? "—" : formatCurrency(r.actualTotal)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Difference</p>
+                        <p
+                          className={`font-medium ${
+                            r.status === "open"
+                              ? "text-muted-foreground"
+                              : Number(r.difference) === 0
+                                ? "text-status-success"
+                                : "text-status-error"
+                          }`}
+                        >
+                          {r.status === "open" ? "—" : formatCurrency(r.difference)}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>

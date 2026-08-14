@@ -22,6 +22,17 @@ export interface IngredientMovement {
   /** Sending / receiving location names (set for `transfer` movements). */
   fromLocationName: string | null;
   toLocationName: string | null;
+  /**
+   * The location this movement actually landed on, and that location's own
+   * stock before/after. `previousStock`/`newStock` above are the ingredient's
+   * business-wide totals, which say nothing about where the change happened.
+   * Null on movements recorded before this was tracked.
+   */
+  locationId: string | null;
+  locationName: string | null;
+  locationType: "instore" | "outstore" | null;
+  locationPreviousStock: number | null;
+  locationNewStock: number | null;
   ingredientName: string | null;
   ingredientUnit: string | null;
   createdAt: string;

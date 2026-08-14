@@ -62,6 +62,8 @@ import ActivityLog from "@/components/ActivityLog";
 import ActivityLogButton from "@/components/ActivityLogButton";
 import KeyboardShortcutsModal from "@/components/KeyboardShortcutsModal";
 import StaffFinancePanel from "@/components/StaffFinancePanel";
+import { useCombos } from "@/hooks/useCombos";
+import { useProductPopularity } from "@/hooks/useReports";
 import { useBeepSound, unlockAudio } from "@/hooks/useBeepSound";
 import { useCategories } from "@/hooks/useCategories";
 import { useProducts } from "@/hooks/useProducts";
@@ -112,7 +114,15 @@ interface MenuItem {
   variations?: VariationGroup[];
   addonGroups?: AddonGroup[];
   visibility?: string[] | null;
+  /** Combo meals are ordered by comboId, not productId. */
+  isCombo?: boolean;
 }
+
+/**
+ * Pseudo-category id for the Combos pill. Combos aren't filed under a menu
+ * category, so the strip gets its own entry right after "All".
+ */
+const COMBOS_CATEGORY = "__combos__";
 
 interface CartItem {
   id: string;
@@ -122,6 +132,7 @@ interface CartItem {
   quantity: number;
   variations?: Record<string, Variation>;
   variationText?: string;
+  isCombo?: boolean;
 }
 
 interface HeldOrder {
@@ -211,10 +222,13 @@ function splitSelectedVariations(selected?: Record<string, Variation>): {
   addons?: Record<string, unknown>[];
 } {
   const variants: { id: string; name: string }[] = [];
-  const addons: { name: string; price: number }[] = [];
+  const addons: { id: string; name: string; price: number }[] = [];
   Object.entries(selected ?? {}).forEach(([key, v]) => {
     if (key.startsWith("addon:")) {
-      addons.push({ name: v.name, price: v.priceModifier });
+      // Carry the add-on id, not just its label: the backend resolves each
+      // add-on's linked ingredients by id, so an id-less snapshot meant add-on
+      // recipes were never deducted from inventory.
+      addons.push({ id: v.id, name: v.name, price: v.priceModifier });
     } else {
       variants.push({ id: v.id, name: v.name });
     }
@@ -256,6 +270,10 @@ const POSPage = () => {
     activeOnly: false,
     storeId: workstationAuth.getStaff()?.storeId,
   });
+  const { data: combos = [] } = useCombos();
+  // Popularity ranking so the "All" tab leads with what this store actually
+  // sells (client spec). Cached separately from the menu itself.
+  const { data: popularity } = useProductPopularity();
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
 
   // Defaults to the "all" view so every loaded item is browsable without
@@ -715,15 +733,61 @@ const POSPage = () => {
     return m;
   }, [menuCategories, isVisibleOnChannel]);
 
-  const channelItems = useMemo(
+  // Combo meals sit alongside products on both POS modes. They carry no
+  // variations or add-ons — the bundle is fixed — so they add straight to the
+  // cart on tap.
+  const comboItems: MenuItem[] = useMemo(
     () =>
-      menuItems.filter(
+      combos
+        .filter((c) => c.isActive)
+        .map((c) => ({
+          id: c.id,
+          name: c.name,
+          price: Number(c.price),
+          categoryId: COMBOS_CATEGORY,
+          image: c.imageUrl ?? undefined,
+          description:
+            c.description ??
+            c.items
+              .map((i) => `${i.quantity}× ${i.product?.name ?? "item"}`)
+              .join(", "),
+          isCombo: true,
+        })),
+    [combos],
+  );
+
+  const channelItems = useMemo(
+    () => [
+      ...menuItems.filter(
         (i) =>
           isVisibleOnChannel(i.visibility) &&
           (!i.categoryId || (categoryChannelById.get(i.categoryId) ?? true)),
       ),
-    [menuItems, isVisibleOnChannel, categoryChannelById],
+      ...comboItems,
+    ],
+    [menuItems, isVisibleOnChannel, categoryChannelById, comboItems],
   );
+
+  // Most-ordered first on the "All" tab, so popular items are always reachable
+  // without scrolling. Items with no sales yet keep their existing order behind
+  // the ranked ones, and combos trail the products they bundle.
+  const unitsSoldById = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const row of popularity?.rows ?? []) m.set(row.productId, row.unitsSold);
+    return m;
+  }, [popularity]);
+
+  const rankedChannelItems = useMemo(() => {
+    return channelItems
+      .map((item, index) => ({ item, index }))
+      .sort((a, b) => {
+        const soldA = unitsSoldById.get(a.item.id) ?? 0;
+        const soldB = unitsSoldById.get(b.item.id) ?? 0;
+        if (soldA !== soldB) return soldB - soldA;
+        return a.index - b.index;
+      })
+      .map((entry) => entry.item);
+  }, [channelItems, unitsSoldById]);
 
   // Only surface category pills that actually have a visible product, so every
   // populated category shows (fixing "missing categories") without empty pills.
@@ -732,7 +796,10 @@ const POSPage = () => {
   // if one of its products is visible.
   const visibleCategories = useMemo(() => {
     const withProducts = new Set(
-      channelItems.map((i) => i.categoryId).filter((id): id is string => !!id),
+      channelItems
+        .filter((i) => !i.isCombo)
+        .map((i) => i.categoryId)
+        .filter((id): id is string => !!id),
     );
     return menuCategories.filter(
       (c) =>
@@ -742,7 +809,7 @@ const POSPage = () => {
     );
   }, [channelItems, menuCategories, isVisibleOnChannel]);
 
-  const filteredItems = channelItems.filter((item) => {
+  const filteredItems = rankedChannelItems.filter((item) => {
     const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           item.description?.toLowerCase().includes(searchQuery.toLowerCase());
     // When searching, show items across all categories; otherwise show all
@@ -777,7 +844,7 @@ const POSPage = () => {
       if (existing) {
         return prev.map((i) => i.id === cartItemId ? { ...i, quantity: i.quantity + 1 } : i);
       }
-      return [...prev, { id: cartItemId, menuItemId: item.id, name: item.name, price: finalPrice, quantity: 1, variations: selectedVariations, variationText }];
+      return [...prev, { id: cartItemId, menuItemId: item.id, name: item.name, price: finalPrice, quantity: 1, variations: selectedVariations, variationText, isCombo: item.isCombo }];
     });
   }, [playBeep]);
 
@@ -830,7 +897,11 @@ const POSPage = () => {
         items: cart.map((c) => {
           const { variation, addons } = splitSelectedVariations(c.variations);
           return {
-            productId: c.menuItemId,
+            // A combo line is identified by comboId — the backend expands it
+            // into its member products to deduct each one's ingredients.
+            ...(c.isCombo
+              ? { comboId: c.menuItemId }
+              : { productId: c.menuItemId }),
             name: c.name,
             quantity: c.quantity,
             unitPrice: c.price,
@@ -1219,7 +1290,10 @@ const POSPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col lg:flex-row">
+    // On desktop the shell owns the viewport height and each column scrolls
+    // inside itself, so the cart sidebar stays put instead of scrolling away
+    // with the menu. Mobile keeps the stacked, page-scrolling layout.
+    <div className="min-h-screen lg:h-screen lg:overflow-hidden bg-background flex flex-col lg:flex-row">
       {/* Left Panel - Menu */}
       <div className="flex-1 flex flex-col min-h-0">
         {/* Header */}
@@ -1368,6 +1442,20 @@ const POSPage = () => {
                     >
                       <span>All</span>
                     </button>
+                    {comboItems.length > 0 && (
+                      <button
+                        key={COMBOS_CATEGORY}
+                        onClick={() => setSelectedCategory(COMBOS_CATEGORY)}
+                        className={`flex items-center gap-2 px-4 py-2.5 rounded-full whitespace-nowrap transition-all font-medium ${
+                          selectedCategory === COMBOS_CATEGORY
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-card border border-border hover:border-primary/30"
+                        } ${posMode === "selfservice" ? "text-base py-3 px-5" : "text-sm"}`}
+                      >
+                        <span>🍱</span>
+                        <span>Combos</span>
+                      </button>
+                    )}
                     {visibleCategories.map((cat) => (
                       <button
                         key={cat.id}
@@ -1391,10 +1479,13 @@ const POSPage = () => {
                 <h2 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
                   {selectedCategory === "all"
                     ? "All Items"
-                    : menuCategories.find((c) => c.id === selectedCategory)?.name}
-                  {selectedCategory !== "all" && (
-                    <span>{menuCategories.find((c) => c.id === selectedCategory)?.emoji}</span>
-                  )}
+                    : selectedCategory === COMBOS_CATEGORY
+                      ? "Combos"
+                      : menuCategories.find((c) => c.id === selectedCategory)?.name}
+                  {selectedCategory !== "all" &&
+                    selectedCategory !== COMBOS_CATEGORY && (
+                      <span>{menuCategories.find((c) => c.id === selectedCategory)?.emoji}</span>
+                    )}
                 </h2>
               )}
 

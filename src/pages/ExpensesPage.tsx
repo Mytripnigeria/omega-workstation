@@ -40,6 +40,7 @@ import {
 import type {
   Expense,
   ExpenseCategory,
+  ExpenseItemType,
   ExpenseStatus,
 } from "@/types/expense";
 
@@ -52,14 +53,49 @@ const CATEGORIES: { value: ExpenseCategory; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
+/** A line of the submission form, held as strings while the user types. */
+interface DraftExpenseItem {
+  key: string;
+  name: string;
+  type: ExpenseItemType;
+  unit: string;
+  quantity: string;
+  unitPrice: string;
+  supplier: string;
+}
+
+let draftItemSeq = 0;
+const blankExpenseItem = (): DraftExpenseItem => ({
+  key: `item-${++draftItemSeq}`,
+  name: "",
+  type: "purchase",
+  unit: "",
+  quantity: "1",
+  unitPrice: "",
+  supplier: "",
+});
+
+const ITEM_TYPES: { value: ExpenseItemType; label: string }[] = [
+  { value: "purchase", label: "Purchase" },
+  { value: "expense", label: "Expense" },
+];
+
 const ExpensesPage = () => {
   const navigate = useNavigate();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [draft, setDraft] = useState<{
     category: ExpenseCategory;
-    amount: string;
     description: string;
-  }>({ category: "supplies", amount: "", description: "" });
+    supplierName: string;
+  }>({ category: "supplies", description: "", supplierName: "" });
+
+  // A submission is a list of purchased/spent lines, not one lump figure —
+  // the client needs name, type, unit, quantity, unit price and supplier per
+  // item so the record is auditable against the receipt.
+  const [items, setItems] = useState<DraftExpenseItem[]>([blankExpenseItem()]);
+  const itemTotal = (i: DraftExpenseItem) =>
+    (Number(i.quantity) || 0) * (Number(i.unitPrice) || 0);
+  const draftTotal = items.reduce((sum, i) => sum + itemTotal(i), 0);
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean;
     title: string;
@@ -130,25 +166,42 @@ const ExpensesPage = () => {
   };
 
   const submit = () => {
-    const amount = Number(draft.amount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setToast({ open: true, type: "error", title: "Invalid amount" });
+    const filled = items.filter((i) => i.name.trim());
+    if (filled.length === 0) {
+      setToast({ open: true, type: "error", title: "Add at least one item" });
       return;
     }
-    if (!draft.description.trim()) {
-      setToast({ open: true, type: "error", title: "Description is required" });
+    const invalid = filled.find(
+      (i) => !(Number(i.quantity) > 0) || !(Number(i.unitPrice) >= 0),
+    );
+    if (invalid) {
+      setToast({
+        open: true,
+        type: "error",
+        title: "Check quantity and unit price",
+        message: `"${invalid.name}" needs a quantity above zero and a unit price.`,
+      });
       return;
     }
     create.mutate(
       {
         category: draft.category,
-        amount,
-        description: draft.description.trim(),
+        description: draft.description.trim() || undefined,
+        supplierName: draft.supplierName.trim() || undefined,
+        items: filled.map((i) => ({
+          name: i.name.trim(),
+          type: i.type,
+          unit: i.unit.trim() || null,
+          quantity: Number(i.quantity),
+          unitPrice: Number(i.unitPrice),
+          supplier: i.supplier.trim() || null,
+        })),
       },
       {
         onSuccess: () => {
           setShowCreateModal(false);
-          setDraft({ category: "supplies", amount: "", description: "" });
+          setDraft({ category: "supplies", description: "", supplierName: "" });
+          setItems([blankExpenseItem()]);
           setToast({
             open: true,
             type: "success",
@@ -298,7 +351,42 @@ const ExpensesPage = () => {
                     {e.category}
                   </Badge>
                 </div>
-                <p className="text-sm text-foreground">{e.description}</p>
+                {e.description && (
+                  <p className="text-sm text-foreground">{e.description}</p>
+                )}
+                {/* Itemised submissions list their lines; legacy ones only had
+                    the free-text description above. */}
+                {e.items?.length ? (
+                  <div className="mt-2 space-y-1">
+                    {e.items.map((it, i) => (
+                      <div
+                        key={`${e.id}-${i}`}
+                        className="flex items-start justify-between gap-3 text-xs"
+                      >
+                        <span className="text-foreground">
+                          {it.name}
+                          <span className="text-muted-foreground">
+                            {" · "}
+                            {it.type === "purchase" ? "Purchase" : "Expense"}
+                            {" · "}
+                            {it.quantity}
+                            {it.unit ? ` ${it.unit}` : ""} × ₦
+                            {Number(it.unitPrice).toLocaleString()}
+                            {it.supplier ? ` · ${it.supplier}` : ""}
+                          </span>
+                        </span>
+                        <span className="font-medium text-foreground whitespace-nowrap">
+                          ₦{Number(it.total).toLocaleString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {e.supplierName && !e.items?.length && (
+                  <p className="text-xs text-muted-foreground">
+                    Supplier: {e.supplierName}
+                  </p>
+                )}
                 <p className="text-xs text-muted-foreground mt-2">
                   Submitted {new Date(e.createdAt).toLocaleString()}
                 </p>
@@ -364,7 +452,7 @@ const ExpensesPage = () => {
       </main>
 
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent className="rounded-2xl max-w-md">
+        <DialogContent className="rounded-2xl max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>New expense request</DialogTitle>
           </DialogHeader>
@@ -393,27 +481,183 @@ const ExpensesPage = () => {
             </div>
             <div>
               <label className="text-sm font-medium text-foreground mb-2 block">
-                Amount (₦)
+                Supplier (optional)
               </label>
               <Input
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="12500"
-                value={draft.amount}
-                onChange={(e) => setDraft({ ...draft, amount: e.target.value })}
+                placeholder="Who was this bought from?"
+                value={draft.supplierName}
+                onChange={(e) =>
+                  setDraft({ ...draft, supplierName: e.target.value })
+                }
                 className="rounded-xl"
               />
+              <p className="text-xs text-muted-foreground mt-1">
+                Applies to every item unless an item names its own.
+              </p>
             </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium text-foreground">
+                  Items
+                </label>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-lg"
+                  onClick={() => setItems((prev) => [...prev, blankExpenseItem()])}
+                >
+                  <Plus className="w-4 h-4 mr-1" />
+                  Add item
+                </Button>
+              </div>
+
+              <div className="space-y-3">
+                {items.map((item, index) => (
+                  <div
+                    key={item.key}
+                    className="rounded-xl border border-border p-3 space-y-2"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Input
+                        placeholder="Item name"
+                        value={item.name}
+                        onChange={(e) =>
+                          setItems((prev) =>
+                            prev.map((it, i) =>
+                              i === index ? { ...it, name: e.target.value } : it,
+                            ),
+                          )
+                        }
+                        className="rounded-lg"
+                      />
+                      {items.length > 1 && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="rounded-lg text-muted-foreground"
+                          onClick={() =>
+                            setItems((prev) => prev.filter((_, i) => i !== index))
+                          }
+                          aria-label="Remove item"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <Select
+                        value={item.type}
+                        onValueChange={(v) =>
+                          setItems((prev) =>
+                            prev.map((it, i) =>
+                              i === index
+                                ? { ...it, type: v as ExpenseItemType }
+                                : it,
+                            ),
+                          )
+                        }
+                      >
+                        <SelectTrigger className="rounded-lg">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ITEM_TYPES.map((t) => (
+                            <SelectItem key={t.value} value={t.value}>
+                              {t.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        placeholder="Unit (kg, pcs…)"
+                        value={item.unit}
+                        onChange={(e) =>
+                          setItems((prev) =>
+                            prev.map((it, i) =>
+                              i === index ? { ...it, unit: e.target.value } : it,
+                            ),
+                          )
+                        }
+                        className="rounded-lg"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="Quantity"
+                        value={item.quantity}
+                        onChange={(e) =>
+                          setItems((prev) =>
+                            prev.map((it, i) =>
+                              i === index
+                                ? { ...it, quantity: e.target.value }
+                                : it,
+                            ),
+                          )
+                        }
+                        className="rounded-lg"
+                      />
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="Unit price (₦)"
+                        value={item.unitPrice}
+                        onChange={(e) =>
+                          setItems((prev) =>
+                            prev.map((it, i) =>
+                              i === index
+                                ? { ...it, unitPrice: e.target.value }
+                                : it,
+                            ),
+                          )
+                        }
+                        className="rounded-lg"
+                      />
+                    </div>
+
+                    <Input
+                      placeholder="Supplier for this item (optional)"
+                      value={item.supplier}
+                      onChange={(e) =>
+                        setItems((prev) =>
+                          prev.map((it, i) =>
+                            i === index ? { ...it, supplier: e.target.value } : it,
+                          ),
+                        )
+                      }
+                      className="rounded-lg"
+                    />
+
+                    <p className="text-xs text-muted-foreground text-right">
+                      Line total: ₦{itemTotal(item).toLocaleString()}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
+                <span className="text-sm text-muted-foreground">Total</span>
+                <span className="text-base font-bold text-foreground">
+                  ₦{draftTotal.toLocaleString()}
+                </span>
+              </div>
+            </div>
+
             <div>
               <label className="text-sm font-medium text-foreground mb-2 block">
-                Description
+                Notes (optional)
               </label>
               <Textarea
-                placeholder="What is this expense for?"
+                placeholder="Anything the manager should know?"
                 value={draft.description}
                 onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-                className="rounded-xl min-h-[100px]"
+                className="rounded-xl min-h-[80px]"
               />
             </div>
           </div>

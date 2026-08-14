@@ -21,6 +21,7 @@ import ActivityLog from "@/components/ActivityLog";
 import { workstationAuth } from "@/services/api";
 import { useMyShifts, useClockIn, useClockOut } from "@/hooks/useShifts";
 import type { Shift } from "@/types/shift";
+import { toLocalISODate } from "@/lib/date-range";
 
 const ShiftsPage = () => {
   const navigate = useNavigate();
@@ -46,8 +47,7 @@ const ShiftsPage = () => {
   const { dateFrom, dateTo } = useMemo(() => {
     const first = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
     const last = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
-    const fmt = (d: Date) => d.toISOString().split("T")[0];
-    return { dateFrom: fmt(first), dateTo: fmt(last) };
+    return { dateFrom: toLocalISODate(first), dateTo: toLocalISODate(last) };
   }, [currentDate]);
 
   const { data: shiftsPage, isLoading } = useMyShifts(staff?.id, dateFrom, dateTo);
@@ -57,7 +57,7 @@ const ShiftsPage = () => {
   const clockOut = useClockOut();
 
   // "Today" lookups
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = toLocalISODate();
   const todayShift = shifts.find((s) => s.date === todayStr) ?? null;
   const isClockedIn =
     todayShift?.status === "in-progress" || (!!todayShift?.actualClockIn && !todayShift?.actualClockOut);
@@ -116,7 +116,7 @@ const ShiftsPage = () => {
 
   const getShiftForDate = (date: Date | null) => {
     if (!date) return null;
-    const ds = date.toISOString().split("T")[0];
+    const ds = toLocalISODate(date);
     return shifts.find((s) => s.date === ds) ?? null;
   };
 
@@ -259,7 +259,7 @@ const ShiftsPage = () => {
                     {days.map((date, idx) => {
                       const shift = getShiftForDate(date);
                       const isToday =
-                        date && date.toISOString().split("T")[0] === todayStr;
+                        date && toLocalISODate(date) === todayStr;
                       const isSelected = selectedShift && shift?.id === selectedShift.id;
 
                       return (

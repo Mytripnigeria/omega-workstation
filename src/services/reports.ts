@@ -40,6 +40,19 @@ export const reportsService = {
     return workstationApi.request<DeliveryStats>(`/reports/delivery${qs ? `?${qs}` : ""}`);
   },
 
+  /**
+   * Units sold per product, most-ordered first. Used to rank the POS menu so
+   * popular items surface at the top of the "All" tab.
+   */
+  productPopularity: (
+    filter: ReportsRange = {},
+  ): Promise<{ rows: { productId: string; unitsSold: number }[] }> => {
+    const qs = buildQuery(filter as Record<string, unknown>);
+    return workstationApi.request<{
+      rows: { productId: string; unitsSold: number }[];
+    }>(`/reports/product-popularity${qs ? `?${qs}` : ""}`);
+  },
+
   dashboard: (storeId?: string): Promise<DashboardSummary> => {
     const qs = storeId ? `?storeId=${encodeURIComponent(storeId)}` : "";
     return workstationApi.request<DashboardSummary>(`/reports/dashboard${qs}`);

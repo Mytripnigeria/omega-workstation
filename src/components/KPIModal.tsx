@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import { workstationAuth } from "@/services/api";
 import { useDashboardSummary, useKitchenStats } from "@/hooks/useReports";
+import { toLocalISODate } from "@/lib/date-range";
 
 interface KPIModalProps {
   open: boolean;
@@ -19,8 +20,8 @@ const KPIModal = ({ open, onClose }: KPIModalProps) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const range = {
-    dateFrom: today.toISOString().split("T")[0],
-    dateTo: new Date().toISOString().split("T")[0],
+    dateFrom: toLocalISODate(today),
+    dateTo: toLocalISODate(),
   };
   const kitchen = useKitchenStats(range);
 

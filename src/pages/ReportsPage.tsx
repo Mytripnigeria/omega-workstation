@@ -28,33 +28,38 @@ import {
   useKitchenStats,
   useDeliveryStats,
 } from "@/hooks/useReports";
-
-type Period = "today" | "7d" | "30d" | "90d";
-
-function rangeFor(period: Period): { dateFrom: string; dateTo: string } {
-  const to = new Date();
-  const from = new Date();
-  if (period === "today") from.setHours(0, 0, 0, 0);
-  else if (period === "7d") from.setDate(from.getDate() - 7);
-  else if (period === "30d") from.setDate(from.getDate() - 30);
-  else if (period === "90d") from.setDate(from.getDate() - 90);
-  return {
-    dateFrom: from.toISOString().split("T")[0],
-    dateTo: to.toISOString().split("T")[0],
-  };
-}
+import DatePeriodFilter from "@/components/DatePeriodFilter";
+import { resolveDatePeriodRange, type DatePeriod } from "@/lib/date-range";
 
 const formatCurrency = (n: number) => `₦${Number(n).toLocaleString()}`;
 
+/**
+ * Sales buckets arrive as local wall-clock labels: `YYYY-MM-DDTHH:mm:ss` for
+ * hourly granularity, a bare `YYYY-MM-DD` otherwise. Read them as strings —
+ * re-parsing a bare date treats it as UTC midnight, which is 01:00 in Lagos.
+ */
+const formatBucket = (bucket: string) => {
+  const [date, time] = bucket.split("T");
+  if (!time) return date;
+  const h = Number(time.slice(0, 2));
+  return `${h % 12 === 0 ? 12 : h % 12}${h >= 12 ? "pm" : "am"}`;
+};
+
 const ReportsPage = () => {
   const navigate = useNavigate();
-  const [period, setPeriod] = useState<Period>("7d");
+  const [period, setPeriod] = useState<DatePeriod>("today");
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
   const [showActivityLog, setShowActivityLog] = useState(false);
-  const range = useMemo(() => rangeFor(period), [period]);
+  const range = useMemo(
+    () => resolveDatePeriodRange(period, customStart, customEnd),
+    [period, customStart, customEnd],
+  );
 
   const sales = useSalesReport({
     ...range,
-    groupBy: period === "90d" ? "week" : "day",
+    // A single day is only legible hour by hour.
+    groupBy: period === "today" || period === "yesterday" ? "hour" : "day",
   });
   const staff = useStaffPerformance(range);
   const kitchen = useKitchenStats(range);
@@ -83,17 +88,16 @@ const ReportsPage = () => {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Select value={period} onValueChange={(v) => setPeriod(v as Period)}>
-                <SelectTrigger className="w-32 rounded-xl">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="today">Today</SelectItem>
-                  <SelectItem value="7d">Last 7 days</SelectItem>
-                  <SelectItem value="30d">Last 30 days</SelectItem>
-                  <SelectItem value="90d">Last 90 days</SelectItem>
-                </SelectContent>
-              </Select>
+              <DatePeriodFilter
+                value={period}
+                onChange={setPeriod}
+                customStart={customStart}
+                customEnd={customEnd}
+                onCustomChange={(start, end) => {
+                  setCustomStart(start);
+                  setCustomEnd(end);
+                }}
+              />
               <ActivityLogButton onClick={() => setShowActivityLog(true)} />
             </div>
           </div>
@@ -169,7 +173,9 @@ const ReportsPage = () => {
                   return (
                     <div key={b.bucket} className="space-y-1">
                       <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">{b.bucket}</span>
+                        <span className="text-muted-foreground">
+                          {formatBucket(b.bucket)}
+                        </span>
                         <span className="font-medium text-foreground">
                           {formatCurrency(b.revenue)} · {b.orders} orders ·{" "}
                           {b.items} items
