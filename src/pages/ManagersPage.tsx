@@ -122,7 +122,10 @@ const ManagersPage = () => {
             icon={ShoppingCart}
             label="Today's orders"
             value={summary.data?.todayOrders ?? 0}
-            sub={`${summary.data?.openOrders ?? 0} open`}
+            // openOrders is a live floor count, not a subset of today's — an
+            // order left pending overnight still counts. Under a "Today's
+            // orders" heading a bare "10 open" reads as 10 of today's 5.
+            sub={`${summary.data?.openOrders ?? 0} open now`}
           />
           <KpiCard
             icon={DollarSign}

@@ -357,7 +357,7 @@ const OutstorePage = () => {
                 <div>
                   <h1 className="text-lg font-bold text-foreground">Outstore (Kitchen)</h1>
                   <p className="text-xs text-muted-foreground">
-                    {ingredients.length} ingredient{ingredients.length === 1 ? "" : "s"}
+                    {filteredItems.length} ingredient{filteredItems.length === 1 ? "" : "s"}
                   </p>
                 </div>
               </div>
@@ -459,7 +459,7 @@ const OutstorePage = () => {
                     </p>
                     <p className="text-xs text-muted-foreground mb-3">
                       {locationId === ALL
-                        ? "Across all locations"
+                        ? "Across out-store locations"
                         : `at ${locationName(locationId)}`}
                     </p>
                     {/* No "Add" here: Out-Store stock only ever arrives by

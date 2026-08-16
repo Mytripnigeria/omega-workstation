@@ -344,7 +344,15 @@ const KitchenPage = () => {
           <div className={`flex items-center gap-2 mb-3 p-3 rounded-xl ${isDelayed ? "bg-destructive/10" : "bg-muted"}`}>
             {isDelayed ? <AlertTriangle className="w-4 h-4 text-destructive" /> : <Clock className="w-4 h-4 text-muted-foreground" />}
             <span className={`font-mono font-bold ${isDelayed ? "text-destructive" : "text-foreground"}`}>{formatCountdown(timerSeconds)}</span>
-            {isDelayed && <Badge className="bg-destructive text-destructive-foreground text-xs rounded-lg">DELAYED</Badge>}
+            {/* The Delayed column holds prep overruns only, so a not-yet-started
+                order must not claim the same word — a board full of "DELAYED"
+                cards next to "No delayed orders" reads as a broken screen. It
+                keeps the same red urgency, just names the right problem. */}
+            {isDelayed && (
+              <Badge className="bg-destructive text-destructive-foreground text-xs rounded-lg">
+                {order.status === "new" ? "WAITING" : "DELAYED"}
+              </Badge>
+            )}
           </div>
         )}
 

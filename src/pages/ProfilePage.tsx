@@ -53,6 +53,7 @@ const ProfilePage = () => {
     title: string;
     description: string;
     onConfirm: () => void;
+    hideCancel?: boolean;
   }>({ open: false, title: "", description: "", onConfirm: () => {} });
 
   const closePinModal = () => {
@@ -87,6 +88,7 @@ const ProfilePage = () => {
         title: "PIN Updated",
         description: "Your login PIN has been changed successfully.",
         onConfirm: () => setConfirmDialog((c) => ({ ...c, open: false })),
+        hideCancel: true,
       });
     } catch (e) {
       setPinError((e as Error).message ?? "Couldn't change your PIN");
@@ -438,6 +440,7 @@ const ProfilePage = () => {
         description={confirmDialog.description}
         onConfirm={confirmDialog.onConfirm}
         confirmText="OK"
+        hideCancel={confirmDialog.hideCancel}
       />
       <ActivityLog open={showActivityLog} onClose={() => setShowActivityLog(false)} pageName="Work Profile" />
     </div>
